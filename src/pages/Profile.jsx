@@ -6,7 +6,7 @@ import { db } from '../services/firebase';
 import toast from 'react-hot-toast';
 
 const Profile = () => {
-  const { currentUser, userProfile, fetchUserProfile } = useAuth();
+  const { currentUser, userProfile, fetchUserProfile, makeAdmin } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -297,7 +297,23 @@ const Profile = () => {
         </div>
 
         {/* Account Actions */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Temporary Admin Setup */}
+          {userProfile.role !== 'admin' && (
+            <div className="card p-6 border-2 border-dashed border-yellow-300 bg-yellow-50">
+              <h3 className="text-lg font-semibold text-yellow-800 mb-4">Development Setup</h3>
+              <p className="text-yellow-700 mb-4 text-sm">
+                Temporary button to make yourself admin for testing the admin dashboard.
+              </p>
+              <button 
+                onClick={makeAdmin}
+                className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg font-medium"
+              >
+                Make Me Admin
+              </button>
+            </div>
+          )}
+
           <div className="card p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Account Security</h3>
             <p className="text-gray-600 mb-4">
