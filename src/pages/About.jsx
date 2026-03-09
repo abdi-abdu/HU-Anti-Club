@@ -27,25 +27,25 @@ const About = () => {
 
   const team = [
     {
-      name: 'Dr. Alemayehu Tadesse',
+      name: 'Mr. Midaksa Dejene',
       role: 'Faculty Advisor',
-      department: 'College of Health and Medical Sciences',
+      department: 'College of Law',
       image: '/api/placeholder/150/150'
     },
     {
-      name: 'Meron Bekele',
+      name: 'Firaol Negash',
       role: 'Club President',
+      department: 'College of Business and Economics',
+      image: '/api/placeholder/150/150'
+    },
+    {
+      name: 'Kamil Umer Hussein',
+      role: 'Vice President',
       department: 'College of Social Sciences and Humanities',
       image: '/api/placeholder/150/150'
     },
     {
-      name: 'Dawit Haile',
-      role: 'Vice President',
-      department: 'College of Computing and Informatics',
-      image: '/api/placeholder/150/150'
-    },
-    {
-      name: 'Hanan Mohammed',
+      name: 'Usman Abdela',
       role: 'Secretary',
       department: 'College of Business and Economics',
       image: '/api/placeholder/150/150'
