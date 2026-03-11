@@ -70,6 +70,21 @@ const AdminDashboard = () => {
     }
   };
 
+  const makeAdmin = async (userId) => {
+    try {
+      // When making someone admin, status is automatically set to active
+      await updateDoc(doc(db, 'users', userId), {
+        role: 'admin',
+        status: 'active'
+      });
+      toast.success('User promoted to admin successfully!');
+      fetchDashboardData(); // Refresh data
+    } catch (error) {
+      console.error('Error making user admin:', error);
+      toast.error('Failed to make user admin');
+    }
+  };
+
   const rejectUser = async (userId) => {
     try {
       await updateDoc(doc(db, 'users', userId), {
@@ -216,18 +231,26 @@ const AdminDashboard = () => {
                           Applied: {formatDate(user.createdAt)}
                         </p>
                       </div>
-                      <div className="flex space-x-2 ml-4">
+                      <div className="flex flex-col space-y-2 ml-4">
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => approveUser(user.id)}
+                            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => rejectUser(user.id)}
+                            className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
+                          >
+                            Reject
+                          </button>
+                        </div>
                         <button
-                          onClick={() => approveUser(user.id)}
-                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
+                          onClick={() => makeAdmin(user.id)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm w-full"
                         >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => rejectUser(user.id)}
-                          className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
-                        >
-                          Reject
+                          Make Admin
                         </button>
                       </div>
                     </div>
