@@ -481,6 +481,15 @@ const AdminDashboard = () => {
                               Make Admin
                             </button>
                           )}
+                          {user.role === 'admin' && user.id !== currentUser?.uid && (
+                            <button onClick={() => updateUser(user.id, { role: 'student' }, 'Admin access removed')}
+                              className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 rounded text-xs">
+                              Remove Admin
+                            </button>
+                          )}
+                          {user.role === 'admin' && user.id === currentUser?.uid && (
+                            <span className="text-xs text-gray-400 italic">You</span>
+                          )}
                           {user.status === 'active' && (
                             <button onClick={() => updateUser(user.id, { status: 'pending' }, 'User suspended')}
                               className="bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs">
