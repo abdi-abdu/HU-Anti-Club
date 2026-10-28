@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isActiveUser() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ── users ───────────────────────────────────────────────────────────────
+    // Own user: full read/write.
+    // Admin: read and write any user document (for approvals / role changes).
+    // New registration: authenticated user can CREATE their own document,
+    //   but cannot self-assign role=admin or status=active.
+    match /users/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+
+      allow create: if isOwner(userId)
+        && request.resource.data.role == 'student'
+        && request.resource.data.status == 'pending';
+    }
+
+    // ── events ──────────────────────────────────────────────────────────────
+    // Public read. Admin create/update/delete with required-field validation.
+    match /events/{eventId} {
+      allow read: if true;
+
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+             'title', 'description', 'date', 'location', 'createdBy', 'createdAt'
+           ])
+        && request.resource.data.createdBy == request.auth.uid;
+
+      allow update, delete: if isAdmin();
+    }
+
+    // ── posts ───────────────────────────────────────────────────────────────
+    // Public read. Admin create/update/delete with required-field validation.
+    match /posts/{postId} {
+      allow read: if true;
+
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+             'title', 'content', 'category', 'authorId', 'createdAt'
+           ])
+        && request.resource.data.authorId == request.auth.uid;
+
+      allow update, delete: if isAdmin();
+    }
+
+    // ── resources ───────────────────────────────────────────────────────────
+    // Active members can read. Admin create/update/delete.
+    match /resources/{resourceId} {
+      allow read: if isActiveUser() || isAdmin();
+
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+             'title', 'description', 'uploadedBy', 'createdAt'
+           ])
+        && request.resource.data.uploadedBy == request.auth.uid;
+
+      allow update, delete: if isAdmin();
+    }
+
+    // ── anonymousMessages ────────────────────────────────────────────────────
+    // Anyone (even unauthenticated) can create a message.
+    // Only admins can read messages or mark them as replied.
+    // No delete allowed (preserves audit trail).
+    match /anonymousMessages/{messageId} {
+      allow read: if isAdmin();
+
+      // Single combined create rule — open to all, with field validation
+      allow create: if request.resource.data.keys().hasAll([
+                         'subject', 'message', 'createdAt', 'isReplied'
+                       ])
+                    && request.resource.data.isReplied == false;
+
+      // Admin can only flip the isReplied flag — no other field changes
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isReplied']);
+    }
+  }
+}

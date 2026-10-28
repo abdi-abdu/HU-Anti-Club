@@ -46,7 +46,8 @@ This guide provides step-by-step instructions for deploying the Anti-Drug Club w
 ### 2.1 Clone and Install
 ```bash
 git clone <your-repository-url>
-cd haramaya-anti-drug-club
+cd hu-anti-drug-club
+cd frontend
 npm install
 ```
 
@@ -57,7 +58,7 @@ npm install
    - Click on web app or create one
    - Copy the config object
 
-2. Update `src/services/firebase.js`:
+2. Update `frontend/src/services/firebase.js`:
 ```javascript
 const firebaseConfig = {
   apiKey: "your-actual-api-key",
@@ -71,6 +72,7 @@ const firebaseConfig = {
 
 ### 2.3 Environment Variables (Optional)
 ```bash
+cd frontend
 cp .env.example .env
 # Edit .env with your Firebase config
 ```
@@ -79,6 +81,7 @@ cp .env.example .env
 
 ### 3.1 Login to Firebase
 ```bash
+cd backend
 firebase login
 ```
 
@@ -94,18 +97,19 @@ Select:
 - ✅ Storage: Configure a security rules file for Cloud Storage
 
 Configuration:
-- **Firestore Rules**: Use existing `firestore.rules`
-- **Firestore Indexes**: Use existing `firestore.indexes.json`
-- **Functions**: Use existing `functions` directory (if created)
-- **Hosting Public Directory**: `dist`
+- **Firestore Rules**: Use existing `firestore.rules` (in `backend/`)
+- **Firestore Indexes**: Use existing `firestore.indexes.json` (in `backend/`)
+- **Functions**: Use existing `functions` directory (in `backend/functions/`)
+- **Hosting Public Directory**: `../frontend/dist`
 - **Single Page App**: Yes
 - **Automatic builds**: No
-- **Storage Rules**: Use existing `storage.rules`
+- **Storage Rules**: Use existing `storage.rules` (in `backend/`)
 
 ## Step 4: Deploy Security Rules
 
-### 4.1 Deploy Firestore Rules
+### 4.1 Deploy Firestore Rules (from the `backend/` directory)
 ```bash
+cd backend
 firebase deploy --only firestore:rules
 ```
 
@@ -121,18 +125,21 @@ firebase deploy --only firestore:indexes
 
 ## Step 5: Build and Deploy Application
 
-### 5.1 Build for Production
+### 5.1 Build for Production (from the `frontend/` directory)
 ```bash
+cd frontend
 npm run build
 ```
 
-### 5.2 Deploy to Hosting
+### 5.2 Deploy to Hosting (from the `backend/` directory)
 ```bash
+cd ../backend
 firebase deploy --only hosting
 ```
 
 ### 5.3 Full Deployment (All Services)
 ```bash
+cd backend
 firebase deploy
 ```
 
@@ -203,7 +210,8 @@ firebase deploy --project production
 
 #### 1. Build Errors
 ```bash
-# Clear cache and reinstall
+# From the frontend/ directory
+cd frontend
 rm -rf node_modules package-lock.json
 npm install
 npm run build
@@ -291,7 +299,8 @@ gcloud firestore export gs://your-bucket/backup-folder
 
 ### Updates
 ```bash
-# Update dependencies
+# Update frontend dependencies
+cd frontend
 npm update
 
 # Update Firebase CLI
@@ -299,6 +308,7 @@ npm install -g firebase-tools@latest
 
 # Deploy updates
 npm run build
+cd ../backend
 firebase deploy
 ```
 

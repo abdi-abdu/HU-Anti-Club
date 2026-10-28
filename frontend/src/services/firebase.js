@@ -3,10 +3,8 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getFunctions } from 'firebase/functions';
-import { getAnalytics } from 'firebase/analytics';
+import { getAnalytics, isSupported } from 'firebase/analytics';
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyDMlgNAXuuxGQCaU32n3JABhZe2n7feeik",
   authDomain: "anti-drug-club-website.firebaseapp.com",
@@ -25,6 +23,8 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const functions = getFunctions(app);
-export const analytics = getAnalytics(app);
+
+// Analytics only runs in a browser that supports it (guards against SSR/test crashes)
+export const analytics = isSupported().then((yes) => yes ? getAnalytics(app) : null);
 
 export default app;

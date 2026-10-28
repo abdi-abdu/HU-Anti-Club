@@ -27,28 +27,28 @@ const About = () => {
 
   const team = [
     {
-      name: 'Mr. Midaksa Dejene',
+      name: 'Mr. Hiksan Girma',
       role: 'Faculty Advisor',
-      department: 'College of Law',
-      image: '/api/placeholder/150/150'
-    },
-    {
-      name: 'Firaol Negash',
-      role: 'Club President',
-      department: 'College of Business and Economics',
-      image: '/api/placeholder/150/150'
-    },
-    {
-      name: 'Kamil Umer Hussein',
-      role: 'Vice President',
       department: 'College of Social Sciences and Humanities',
-      image: '/api/placeholder/150/150'
+      image: '/images/team/hiksan-girma.jpg'
     },
     {
-      name: 'Usman Abdela',
+      name: 'Mr. Kamil Umer Hussein',
+      role: 'Club President',
+      department: 'College of Social Sciences and Humanities',
+      image: '/images/team/kamil-umer.jpg'
+    },
+    {
+      name: 'Mr. Rashad Abas',
+      role: 'Vice President',
+      department: 'College of Agriculture and Environmental Science',
+      image: '/images/team/rashad-abas.jpg'
+    },
+    {
+      name: 'Ms. Ahlam Abdushekur',
       role: 'Secretary',
-      department: 'College of Business and Economics',
-      image: '/api/placeholder/150/150'
+      department: 'College of Law',
+      image: '/images/team/ahlam-abdushekur.jpg'
     }
   ];
 
@@ -196,8 +196,23 @@ const About = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {team.map((member, index) => (
               <div key={index} className="card p-6 text-center">
-                <div className="w-24 h-24 bg-gray-200 rounded-full mx-auto mb-4 flex items-center justify-center">
-                  <User className="h-12 w-12 text-gray-400" />
+                <div className="w-28 h-28 rounded-full mx-auto mb-4 overflow-hidden border-4 border-primary-100 shadow-md bg-gray-200 flex items-center justify-center">
+                  {member.image ? (
+                    <img
+                      src={member.image}
+                      alt={member.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // Falls back to icon if the image file is missing
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.nextSibling.style.display = 'block';
+                      }}
+                    />
+                  ) : null}
+                  <User
+                    className="h-14 w-14 text-gray-400"
+                    style={{ display: member.image ? 'none' : 'block' }}
+                  />
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-1">{member.name}</h3>
                 <p className="text-primary-600 font-medium mb-2">{member.role}</p>

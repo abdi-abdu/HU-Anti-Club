@@ -49,22 +49,39 @@ const Home = () => {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <section className="bg-gradient-to-r from-primary-600 to-secondary-600 text-white py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section
+        className="relative text-white py-32 min-h-[600px] flex items-center"
+        style={{
+          backgroundImage: 'url(/images/hu-gate.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      >
+        {/* Dark overlay so text stays readable over the photo */}
+        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/50 to-black/40" />
+
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
           <div className="text-center">
-            <Shield className="h-16 w-16 mx-auto mb-6 text-white" />
-            <h1 className="text-4xl md:text-6xl font-bold mb-6">
+            <Shield className="h-16 w-16 mx-auto mb-6 text-white drop-shadow-lg" />
+            <h1 className="text-4xl md:text-6xl font-bold mb-6 drop-shadow-lg">
               Haramaya University
-              <span className="block text-secondary-200">Anti-Drug Club</span>
+              <span className="block text-green-300">Anti-Drug Club</span>
             </h1>
-            <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto">
+            <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto text-gray-100 drop-shadow">
               Building a drug-free campus community through education, awareness, and support
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/register" className="bg-white text-primary-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
+              <Link
+                to="/register"
+                className="bg-white text-primary-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors shadow-lg"
+              >
                 Join Our Club
               </Link>
-              <Link to="/help" className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-primary-600 transition-colors">
+              <Link
+                to="/help"
+                className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-primary-600 transition-colors shadow-lg"
+              >
                 Get Help Now
               </Link>
             </div>

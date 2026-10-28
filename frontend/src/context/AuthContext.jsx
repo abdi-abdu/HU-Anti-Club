@@ -63,23 +63,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Make current user admin (temporary function for setup)
-  const makeAdmin = async () => {
-    if (!currentUser) return;
-    try {
-      await setDoc(doc(db, 'users', currentUser.uid), {
-        role: 'admin',
-        status: 'active'
-      }, { merge: true });
-      await fetchUserProfile(currentUser.uid);
-      toast.success('You are now an admin!');
-    } catch (error) {
-      toast.error('Failed to make admin');
-      throw error;
-    }
-  };
-
-  // Sign out user
+// Sign out user
   const logout = async () => {
     try {
       await signOut(auth);
@@ -124,8 +108,7 @@ export const AuthProvider = ({ children }) => {
     signup,
     signin,
     logout,
-    fetchUserProfile,
-    makeAdmin
+    fetchUserProfile
   };
 
   return (

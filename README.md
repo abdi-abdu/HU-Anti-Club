@@ -133,32 +133,50 @@ This system is designed for academic and real institutional use at Haramaya Univ
 ## 📂 Project Structure
 
 ```
-src/
-├── components/
-│   ├── Layout/
-│   │   ├── Navbar.jsx
-│   │   └── Footer.jsx
-│   └── ProtectedRoute.jsx
-├── pages/
-│   ├── Auth/
-│   │   ├── Login.jsx
-│   │   └── Register.jsx
-│   ├── Admin/
-│   │   └── Dashboard.jsx
-│   ├── Home.jsx
-│   ├── About.jsx
-│   ├── Events.jsx
-│   ├── Blog.jsx
-│   ├── Resources.jsx
-│   ├── Help.jsx
-│   └── Profile.jsx
-├── services/
-│   └── firebase.js
-├── context/
-│   └── AuthContext.jsx
-├── hooks/
-├── utils/
-└── App.jsx
+HU-Anti-Club/
+├── README.md
+├── DEPLOYMENT.md
+├── .gitignore
+├── frontend/                    # React + Vite application
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   ├── postcss.config.js
+│   ├── vercel.json
+│   ├── .env.example
+│   └── src/
+│       ├── components/
+│       │   ├── Layout/
+│       │   │   ├── Navbar.jsx
+│       │   │   └── Footer.jsx
+│       │   └── ProtectedRoute.jsx
+│       ├── pages/
+│       │   ├── Auth/
+│       │   │   ├── Login.jsx
+│       │   │   └── Register.jsx
+│       │   ├── Admin/
+│       │   │   └── Dashboard.jsx
+│       │   ├── Home.jsx
+│       │   ├── About.jsx
+│       │   ├── Events.jsx
+│       │   ├── Blog.jsx
+│       │   ├── Resources.jsx
+│       │   ├── Help.jsx
+│       │   └── Profile.jsx
+│       ├── services/
+│       │   └── firebase.js
+│       ├── context/
+│       │   └── AuthContext.jsx
+│       └── App.jsx
+└── backend/                     # Firebase config & serverless backend
+    ├── firebase.json
+    ├── firestore.rules
+    ├── firestore.indexes.json
+    ├── storage.rules
+    └── functions/               # Cloud Functions
+        ├── package.json
+        └── index.js
 ```
 
 ## 🚀 Getting Started
@@ -173,11 +191,12 @@ src/
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd haramaya-anti-drug-club
+   cd hu-anti-drug-club
    ```
 
-2. **Install dependencies**
+2. **Install frontend dependencies**
    ```bash
+   cd frontend
    npm install
    ```
 
@@ -189,7 +208,7 @@ src/
    - Copy your Firebase config
 
 4. **Configure Firebase**
-   - Update `src/services/firebase.js` with your Firebase configuration:
+   - Update `frontend/src/services/firebase.js` with your Firebase configuration:
    ```javascript
    const firebaseConfig = {
      apiKey: "your-api-key",
@@ -201,14 +220,16 @@ src/
    };
    ```
 
-5. **Deploy Firebase Security Rules**
+5. **Deploy Firebase Security Rules** (from the `backend/` directory)
    ```bash
+   cd ../backend
    firebase deploy --only firestore:rules
    firebase deploy --only storage
    ```
 
-6. **Start development server**
+6. **Start development server** (from the `frontend/` directory)
    ```bash
+   cd ../frontend
    npm run dev
    ```
 
@@ -230,7 +251,9 @@ src/
 
 4. **Hosting Setup** (for deployment)
    ```bash
+   cd frontend
    npm run build
+   cd ../backend
    firebase deploy --only hosting
    ```
 
@@ -285,18 +308,20 @@ The system includes comprehensive security rules:
 ## 🚀 Deployment
 
 ### Firebase Hosting
-1. **Build the project**
+1. **Build the project** (from the `frontend/` directory)
    ```bash
+   cd frontend
    npm run build
    ```
 
-2. **Deploy to Firebase**
+2. **Deploy to Firebase** (from the `backend/` directory)
    ```bash
+   cd ../backend
    firebase deploy
    ```
 
 ### Environment Variables
-Create a `.env` file for environment-specific configurations:
+Create a `.env` file in the `frontend/` directory for environment-specific configurations:
 ```
 VITE_FIREBASE_API_KEY=your-api-key
 VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
