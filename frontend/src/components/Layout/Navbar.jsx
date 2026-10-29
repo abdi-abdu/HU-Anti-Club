@@ -32,7 +32,7 @@ const Navbar = () => {
         <div className="flex justify-between h-16">
           <div className="flex items-center">
             <Link to="/" className="flex items-center space-x-2">
-              <img src="/images/logo.png" alt="HU Anti-Drug Club Logo" className="h-10 w-10 object-contain" />
+              <img src="/images/logo.png" alt="HU Anti-Drug Club Logo" className="h-10 w-10 object-contain rounded-full" />
               <span className="font-bold text-xl text-gray-900">HU Anti-Drug Club</span>
             </Link>
           </div>

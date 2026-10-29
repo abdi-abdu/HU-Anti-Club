@@ -63,7 +63,7 @@ const Home = () => {
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
           <div className="text-center">
-            <img src="/images/logo.png" alt="HU Anti-Drug Club Logo" className="h-16 w-16 mx-auto mb-6 drop-shadow-lg object-contain" />
+            <img src="/images/logo.png" alt="HU Anti-Drug Club Logo" className="h-16 w-16 mx-auto mb-6 drop-shadow-lg object-contain rounded-full" />
             <h1 className="text-4xl md:text-6xl font-bold mb-6 drop-shadow-lg">
               Haramaya University
               <span className="block text-green-300">Anti-Drug Club</span>
