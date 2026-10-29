@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, Users, Calendar, BookOpen, Heart, ArrowRight } from 'lucide-react';
+import { Users, Calendar, BookOpen, Heart, ArrowRight } from 'lucide-react';
 import { collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
@@ -63,7 +63,7 @@ const Home = () => {
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
           <div className="text-center">
-            <Shield className="h-16 w-16 mx-auto mb-6 text-white drop-shadow-lg" />
+            <img src="/images/logo.png" alt="HU Anti-Drug Club Logo" className="h-16 w-16 mx-auto mb-6 drop-shadow-lg object-contain" />
             <h1 className="text-4xl md:text-6xl font-bold mb-6 drop-shadow-lg">
               Haramaya University
               <span className="block text-green-300">Anti-Drug Club</span>

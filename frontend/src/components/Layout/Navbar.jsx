@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, X, Shield, User, LogOut } from 'lucide-react';
+import { Menu, X, User, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const Navbar = () => {
@@ -32,7 +32,7 @@ const Navbar = () => {
         <div className="flex justify-between h-16">
           <div className="flex items-center">
             <Link to="/" className="flex items-center space-x-2">
-              <Shield className="h-8 w-8 text-primary-600" />
+              <img src="/images/logo.png" alt="HU Anti-Drug Club Logo" className="h-10 w-10 object-contain" />
               <span className="font-bold text-xl text-gray-900">HU Anti-Drug Club</span>
             </Link>
           </div>

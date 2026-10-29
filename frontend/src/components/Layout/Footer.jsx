@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Mail, Phone, MapPin } from 'lucide-react';
+import { Mail, Phone, MapPin } from 'lucide-react';
 
 const Footer = () => {
   return (
@@ -9,7 +9,7 @@ const Footer = () => {
           {/* Logo and Description */}
           <div className="col-span-1 md:col-span-2">
             <div className="flex items-center space-x-2 mb-4">
-              <Shield className="h-8 w-8 text-primary-400" />
+              <img src="/images/logo.png" alt="HU Anti-Drug Club Logo" className="h-10 w-10 object-contain" />
               <span className="font-bold text-xl">HU Anti-Drug Club</span>
             </div>
             <p className="text-gray-300 mb-4">
