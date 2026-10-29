@@ -7,8 +7,7 @@ import {
 import {
   collection, query, getDocs, orderBy,
   updateDoc, doc, addDoc, deleteDoc, serverTimestamp
-} from 'firebase/firestore';
-import { db } from '../../services/firebase';
+} from 'firebase/firestore';import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -55,6 +54,10 @@ const AdminDashboard = () => {
   const [postModal,    setPostModal]    = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
   const [editingPost,  setEditingPost]  = useState(null);
+  const [regsModal,    setRegsModal]    = useState(false);
+  const [regsEvent,    setRegsEvent]    = useState(null);
+  const [regsData,     setRegsData]     = useState([]);
+  const [regsLoading,  setRegsLoading]  = useState(false);
 
   // forms
   const emptyEvent = { title: '', description: '', date: '', time: '', location: '' };
@@ -168,6 +171,22 @@ const AdminDashboard = () => {
       toast.success('Event deleted');
       fetchAll();
     } catch { toast.error('Failed to delete event'); }
+  };
+
+  // ── view registrations ───────────────────────────────────────────────────────
+  const viewRegistrations = async (ev) => {
+    setRegsEvent(ev);
+    setRegsModal(true);
+    setRegsLoading(true);
+    try {
+      const snap = await getDocs(collection(db, 'events', ev.id, 'registrations'));
+      setRegsData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to load registrations');
+    } finally {
+      setRegsLoading(false);
+    }
   };
 
   // ── post actions ─────────────────────────────────────────────────────────────
@@ -352,13 +371,21 @@ const AdminDashboard = () => {
                       </div>
                     </div>
                     <p className="text-gray-600 text-sm mb-3 line-clamp-2">{ev.description}</p>
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
+                    <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
                         {formatDate(ev.date)}
                       </span>
                       <span>📍 {ev.location}</span>
                     </div>
+                    {/* registrations */}
+                    <button
+                      onClick={() => viewRegistrations(ev)}
+                      className="flex items-center gap-2 text-xs bg-primary-50 text-primary-700 hover:bg-primary-100 px-3 py-1.5 rounded-full transition-colors"
+                    >
+                      <Users className="h-3 w-3" />
+                      View Registrations
+                    </button>
                   </div>
                 ))}
               </div>
@@ -681,6 +708,52 @@ const AdminDashboard = () => {
               </button>
             </div>
           </form>
+        </Modal>
+      )}
+      {/* ── REGISTRATIONS MODAL ── */}
+      {regsModal && (
+        <Modal
+          title={`Registrations — ${regsEvent?.title}`}
+          onClose={() => { setRegsModal(false); setRegsData([]); }}
+        >
+          {regsLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600" />
+            </div>
+          ) : regsData.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="h-12 w-12 mx-auto text-gray-300 mb-3" />
+              <p className="text-gray-500">No registrations yet for this event</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-gray-500 mb-4">
+                {regsData.length} {regsData.length === 1 ? 'person has' : 'people have'} registered
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">#</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">Name</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">Email</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600 hidden sm:table-cell">Department</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {regsData.map((r, i) => (
+                      <tr key={r.id} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 text-gray-400">{i + 1}</td>
+                        <td className="px-3 py-2 font-medium text-gray-900">{r.fullName || '—'}</td>
+                        <td className="px-3 py-2 text-gray-600">{r.email}</td>
+                        <td className="px-3 py-2 text-gray-500 hidden sm:table-cell">{r.department || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </Modal>
       )}
     </div>
