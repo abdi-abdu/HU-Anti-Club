@@ -36,6 +36,18 @@ service cloud.firestore {
         && request.resource.data.status == 'pending';
     }
 
+    // ── announcements ────────────────────────────────────────────────────────
+    // Public read for published announcements.
+    // Only admins can create, update, delete.
+    match /announcements/{announcementId} {
+      allow read: if true;
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+             'title', 'message', 'published', 'createdBy', 'createdAt'
+           ]);
+      allow update, delete: if isAdmin();
+    }
+
     // ── leadership ───────────────────────────────────────────────────────────
     // Public read (About page shows current leaders publicly).
     // Only admins can create, update appointments.

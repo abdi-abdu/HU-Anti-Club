@@ -14,6 +14,7 @@ import { useAuth } from '../../context/AuthContext';
 import Members from './Members';
 import Leadership from './Leadership';
 import AdminEvents from './Events';
+import Announcements from './Announcements';
 import toast from 'react-hot-toast';
 
 // ─── tiny modal wrapper ───────────────────────────────────────────────────────
@@ -375,6 +376,9 @@ const AdminDashboard = () => {
 
         {/* ── LEADERSHIP TAB ── */}
         {activeTab === 'leadership' && <Leadership />}
+
+        {/* ── ANNOUNCEMENTS TAB ── */}
+        {activeTab === 'announcements' && <Announcements />}
 
         {/* ── MESSAGES TAB ── */}
         {activeTab === 'messages' && (

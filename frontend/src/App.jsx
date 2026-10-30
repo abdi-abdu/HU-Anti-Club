@@ -60,14 +60,14 @@ function AppRoutes() {
               All specific sub-paths MUST come before the dynamic :tab route
               so React Router matches them first.
           ──────────────────────────────────────────────────────────────── */}
-          <Route path="/admin"             element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/members"     element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/leadership"  element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/events"      element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/posts"       element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/messages"    element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          {/* Generic fallback for any other /admin/:tab */}
-          <Route path="/admin/:tab"        element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin"                  element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/members"          element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/leadership"       element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/events"           element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/posts"            element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/announcements"    element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/messages"         element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/:tab"             element={<AdminRoute><AdminDashboard /></AdminRoute>} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />

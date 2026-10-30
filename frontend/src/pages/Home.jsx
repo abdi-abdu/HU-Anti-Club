@@ -1,20 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Calendar, BookOpen, Heart, ArrowRight } from 'lucide-react';
+import { Users, Calendar, BookOpen, Heart, ArrowRight, Bell } from 'lucide-react';
 import { collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { getTypeConfig } from './Admin/Announcements';
 
 const Home = () => {
-  const [recentEvents, setRecentEvents] = useState([]);
-  const [recentPosts, setRecentPosts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [recentEvents,        setRecentEvents]        = useState([]);
+  const [recentPosts,         setRecentPosts]         = useState([]);
+  const [announcements,       setAnnouncements]       = useState([]);
+  const [loading,             setLoading]             = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch recent events
+        // Fetch recent published events
         const eventsQuery = query(
           collection(db, 'events'),
+          where('status', '==', 'published'),
           orderBy('createdAt', 'desc'),
           limit(3)
         );
@@ -29,6 +32,18 @@ const Home = () => {
         );
         const postsSnapshot = await getDocs(postsQuery);
         setRecentPosts(postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+
+        // Fetch published announcements (latest 5)
+        try {
+          const annQuery = query(
+            collection(db, 'announcements'),
+            where('published', '==', true),
+            orderBy('createdAt', 'desc'),
+            limit(5)
+          );
+          const annSnapshot = await getDocs(annQuery);
+          setAnnouncements(annSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        } catch { /* announcements collection may not exist yet */ }
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -88,6 +103,36 @@ const Home = () => {
           </div>
         </div>
       </section>
+
+      {/* Announcements Banner — only shown when there are published announcements */}
+      {announcements.length > 0 && (
+        <section className="bg-primary-50 border-b border-primary-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-start gap-3">
+              <Bell className="h-5 w-5 text-primary-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-primary-800 mb-1">Announcements</p>
+                <div className="space-y-2">
+                  {announcements.map(ann => {
+                    const typeCfg = getTypeConfig(ann.type);
+                    return (
+                      <div key={ann.id} className="flex items-start gap-2 flex-wrap">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${typeCfg.color}`}>
+                          {typeCfg.label}
+                        </span>
+                        <div>
+                          <span className="text-sm font-medium text-gray-900">{ann.title}: </span>
+                          <span className="text-sm text-gray-700">{ann.message}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Mission Section */}
       <section className="py-16 bg-gray-50">
