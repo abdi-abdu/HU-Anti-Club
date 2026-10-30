@@ -28,18 +28,23 @@ const GuestRoute = ({ children }) => {
   return children;
 };
 
+// Wraps a route in admin ProtectedRoute
+const AdminRoute = ({ children }) => (
+  <ProtectedRoute requireAdmin={true}>{children}</ProtectedRoute>
+);
+
 function AppRoutes() {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
       <main className="flex-grow">
         <Routes>
-          {/* Guest-only routes — redirect logged-in users to their dashboard */}
-          <Route path="/"        element={<GuestRoute><Home /></GuestRoute>} />
-          <Route path="/login"   element={<GuestRoute><Login /></GuestRoute>} />
+          {/* Guest-only routes */}
+          <Route path="/"         element={<GuestRoute><Home /></GuestRoute>} />
+          <Route path="/login"    element={<GuestRoute><Login /></GuestRoute>} />
           <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
 
-          {/* Public routes accessible to everyone */}
+          {/* Public routes */}
           <Route path="/about"     element={<About />} />
           <Route path="/events"    element={<Events />} />
           <Route path="/blog"      element={<Blog />} />
@@ -48,29 +53,23 @@ function AppRoutes() {
 
           {/* Protected student route */}
           <Route path="/profile" element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
+            <ProtectedRoute><Profile /></ProtectedRoute>
           } />
 
-          {/* Protected admin route */}
-          <Route path="/admin" element={
-            <ProtectedRoute requireAdmin={true}>
-              <AdminDashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/:tab" element={
-            <ProtectedRoute requireAdmin={true}>
-              <AdminDashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/leadership" element={
-            <ProtectedRoute requireAdmin={true}>
-              <AdminDashboard />
-            </ProtectedRoute>
-          } />
+          {/* ── Admin routes ─────────────────────────────────────────────
+              All specific sub-paths MUST come before the dynamic :tab route
+              so React Router matches them first.
+          ──────────────────────────────────────────────────────────────── */}
+          <Route path="/admin"             element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/members"     element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/leadership"  element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/events"      element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/posts"       element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/messages"    element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          {/* Generic fallback for any other /admin/:tab */}
+          <Route path="/admin/:tab"        element={<AdminRoute><AdminDashboard /></AdminRoute>} />
 
-          {/* Fallback — redirect to home */}
+          {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

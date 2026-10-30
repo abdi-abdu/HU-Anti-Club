@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Users, Calendar, FileText, MessageCircle,
   CheckCircle, Clock, Plus, X, Save, Trash2,
@@ -37,8 +37,10 @@ const AdminDashboard = () => {
   const { tab } = useParams();
   const navigate = useNavigate();
 
-  // derive active tab from URL — default to 'overview'
-  const activeTab = tab || 'overview';
+  // derive active tab from URL pathname — handles both /admin/:tab and /admin/leadership etc.
+  const location = useLocation();
+  const pathSegment = location.pathname.replace('/admin', '').replace(/^\//, '');
+  const activeTab = pathSegment || 'overview';
 
   // data
   const [stats, setStats]               = useState({ totalUsers: 0, pendingUsers: 0, totalEvents: 0, totalPosts: 0, anonymousMessages: 0 });
