@@ -31,12 +31,14 @@ const Events = () => {
         if (filter === 'upcoming') {
           eventsQuery = query(
             collection(db, 'events'),
+            where('status', '==', 'published'),
             where('date', '>=', now),
             orderBy('date', 'asc')
           );
         } else {
           eventsQuery = query(
             collection(db, 'events'),
+            where('status', '==', 'published'),
             where('date', '<', now),
             orderBy('date', 'desc')
           );

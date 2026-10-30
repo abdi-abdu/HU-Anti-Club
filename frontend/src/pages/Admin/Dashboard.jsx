@@ -13,6 +13,7 @@ import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import Members from './Members';
 import Leadership from './Leadership';
+import AdminEvents from './Events';
 import toast from 'react-hot-toast';
 
 // ─── tiny modal wrapper ───────────────────────────────────────────────────────
@@ -322,60 +323,7 @@ const AdminDashboard = () => {
         )}
 
         {/* ── EVENTS TAB ── */}
-        {activeTab === 'events' && (
-          <>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-900">Events ({events.length})</h2>
-              <button onClick={openCreateEvent} className="btn-primary flex items-center gap-2">
-                <Plus className="h-4 w-4" /> Create Event
-              </button>
-            </div>
-
-            {events.length === 0 ? (
-              <div className="card p-12 text-center">
-                <Calendar className="h-16 w-16 mx-auto text-gray-300 mb-4" />
-                <p className="text-gray-500 mb-4">No events yet</p>
-                <button onClick={openCreateEvent} className="btn-primary">Create First Event</button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {events.map(ev => (
-                  <div key={ev.id} className="card p-5">
-                    <div className="flex justify-between items-start mb-3">
-                      <h3 className="font-semibold text-gray-900 text-lg pr-4">{ev.title}</h3>
-                      <div className="flex gap-2 flex-shrink-0">
-                        <button onClick={() => openEditEvent(ev)}
-                          className="text-blue-600 hover:text-blue-700 p-1">
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button onClick={() => deleteEvent(ev.id)}
-                          className="text-red-500 hover:text-red-600 p-1">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-gray-600 text-sm mb-3 line-clamp-2">{ev.description}</p>
-                    <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {formatDate(ev.date)}
-                      </span>
-                      <span>📍 {ev.location}</span>
-                    </div>
-                    {/* registrations */}
-                    <button
-                      onClick={() => viewRegistrations(ev)}
-                      className="flex items-center gap-2 text-xs bg-primary-50 text-primary-700 hover:bg-primary-100 px-3 py-1.5 rounded-full transition-colors"
-                    >
-                      <Users className="h-3 w-3" />
-                      View Registrations
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
+        {activeTab === 'events' && <AdminEvents />}
 
         {/* ── POSTS TAB ── */}
         {activeTab === 'posts' && (
