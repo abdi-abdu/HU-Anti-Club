@@ -83,13 +83,45 @@ const Leadership = () => {
     try {
       const [apptSnap, membersSnap] = await Promise.all([
         getDocs(query(collection(db, 'leadership'), orderBy('startDate', 'desc'))),
-        getDocs(query(collection(db, 'users'), where('status', '==', 'active'), orderBy('fullName', 'asc'))),
+        // fetch all active members — sort client-side to avoid composite index requirement
+        getDocs(query(collection(db, 'users'), where('status', '==', 'active'))),
       ]);
       setAppointments(apptSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setMembers(membersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      // sort members by fullName client-side
+      const memberList = membersSnap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
+      setMembers(memberList);
     } catch (err) {
-      console.error(err);
-      toast.error('Failed to load leadership data');
+      console.error('Leadership fetch error:', err);
+      // If leadership collection doesn't exist yet, handle gracefully
+      if (err.code === 'failed-precondition' || err.message?.includes('index')) {
+        toast.error('Missing Firestore index. Trying fallback…');
+        // Fallback: fetch without orderBy
+        try {
+          const [apptSnap, membersSnap] = await Promise.all([
+            getDocs(collection(db, 'leadership')),
+            getDocs(query(collection(db, 'users'), where('status', '==', 'active'))),
+          ]);
+          const appts = apptSnap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => {
+              const ad = a.startDate?.toDate?.() || new Date(0);
+              const bd = b.startDate?.toDate?.() || new Date(0);
+              return bd - ad;
+            });
+          setAppointments(appts);
+          const memberList = membersSnap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
+          setMembers(memberList);
+        } catch (fallbackErr) {
+          console.error('Fallback also failed:', fallbackErr);
+          toast.error('Failed to load leadership data');
+        }
+      } else {
+        toast.error('Failed to load leadership data');
+      }
     } finally {
       setLoading(false);
     }
