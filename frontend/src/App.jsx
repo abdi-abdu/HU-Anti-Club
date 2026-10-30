@@ -64,6 +64,11 @@ function AppRoutes() {
               <AdminDashboard />
             </ProtectedRoute>
           } />
+          <Route path="/admin/leadership" element={
+            <ProtectedRoute requireAdmin={true}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          } />
 
           {/* Fallback — redirect to home */}
           <Route path="*" element={<Navigate to="/" replace />} />

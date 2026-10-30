@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, User, LogOut, LayoutDashboard, Calendar, FileText, MessageCircle, BookOpen, Users } from 'lucide-react';
+import { Menu, X, User, LogOut, LayoutDashboard, Calendar, FileText, MessageCircle, BookOpen, Users, Award } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const Navbar = () => {
@@ -29,11 +29,12 @@ const Navbar = () => {
 
   // ── admin dashboard nav ──────────────────────────────────────────────────
   const adminLinks = [
-    { to: '/admin',          label: 'Overview',      icon: LayoutDashboard },
-    { to: '/admin/events',   label: 'Events',        icon: Calendar        },
-    { to: '/admin/posts',    label: 'Blog Posts',    icon: FileText        },
-    { to: '/admin/members',  label: 'Members',       icon: Users           },
-    { to: '/admin/messages', label: 'Help Messages', icon: MessageCircle   },
+    { to: '/admin',            label: 'Overview',      icon: LayoutDashboard },
+    { to: '/admin/members',    label: 'Members',       icon: Users           },
+    { to: '/admin/leadership', label: 'Leadership',    icon: Award           },
+    { to: '/admin/events',     label: 'Events',        icon: Calendar        },
+    { to: '/admin/posts',      label: 'Blog Posts',    icon: FileText        },
+    { to: '/admin/messages',   label: 'Help Messages', icon: MessageCircle   },
   ];
 
   // ── student dashboard nav ────────────────────────────────────────────────

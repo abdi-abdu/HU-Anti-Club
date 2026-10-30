@@ -36,6 +36,19 @@ service cloud.firestore {
         && request.resource.data.status == 'pending';
     }
 
+    // ── leadership ───────────────────────────────────────────────────────────
+    // Public read (About page shows current leaders publicly).
+    // Only admins can create, update appointments.
+    // No delete — historical records must be preserved.
+    match /leadership/{appointmentId} {
+      allow read: if true;
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+             'memberId', 'position', 'startDate', 'status', 'createdBy', 'createdAt'
+           ]);
+      allow update: if isAdmin();
+    }
+
     // ── events ──────────────────────────────────────────────────────────────
     // Public read. Admin create/update/delete with required-field validation.
     match /events/{eventId} {

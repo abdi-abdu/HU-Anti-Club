@@ -1,7 +1,61 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Shield, Target, Users, Heart, Award, BookOpen, User } from 'lucide-react';
+import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import { POSITIONS } from './Admin/Leadership';
 
 const About = () => {
+  const [leadershipLoading, setLeadershipLoading] = useState(true);
+  const [leaders, setLeaders] = useState([]);
+
+  // Fetch current active leadership from Firestore
+  useEffect(() => {
+    const fetchLeadership = async () => {
+      try {
+        const [apptSnap, usersSnap] = await Promise.all([
+          getDocs(query(
+            collection(db, 'leadership'),
+            where('status', '==', 'active'),
+            orderBy('startDate', 'asc')
+          )),
+          getDocs(collection(db, 'users')),
+        ]);
+
+        const usersMap = {};
+        usersSnap.docs.forEach(d => { usersMap[d.id] = d.data(); });
+
+        const appts = apptSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        // Sort by position order defined in POSITIONS
+        const posOrder = POSITIONS.reduce((acc, p, i) => { acc[p.id] = i; return acc; }, {});
+        appts.sort((a, b) => (posOrder[a.position] ?? 99) - (posOrder[b.position] ?? 99));
+
+        const mapped = appts.map(appt => {
+          const member = usersMap[appt.memberId] || {};
+          const posLabel = POSITIONS.find(p => p.id === appt.position)?.label || appt.position;
+          return {
+            id:         appt.id,
+            name:       member.fullName   || 'Unknown',
+            role:       posLabel,
+            department: member.college    || member.department || '',
+            // Use team photo if present, otherwise null (shows initials fallback)
+            image:      `/images/team/${appt.memberId}.jpg`,
+            initials:   (member.fullName || 'U').charAt(0).toUpperCase(),
+          };
+        });
+
+        setLeaders(mapped);
+      } catch (err) {
+        console.error('Failed to fetch leadership:', err);
+        setLeaders([]); // graceful degradation
+      } finally {
+        setLeadershipLoading(false);
+      }
+    };
+
+    fetchLeadership();
+  }, []);
+
   const values = [
     {
       icon: Shield,
@@ -25,33 +79,6 @@ const About = () => {
     }
   ];
 
-  const team = [
-    {
-      name: 'Mr. Hiksan Girma',
-      role: 'Faculty Advisor',
-      department: 'College of Social Sciences and Humanities',
-      image: '/images/team/hiksan-girma.jpg'
-    },
-    {
-      name: 'Mr. Kamil Umer Hussein',
-      role: 'Club President',
-      department: 'College of Social Sciences and Humanities',
-      image: '/images/team/kamil-umer.jpg'
-    },
-    {
-      name: 'Mr. Rashad Abas',
-      role: 'Vice President',
-      department: 'College of Agriculture and Environmental Science',
-      image: '/images/team/rashad-abas.jpg'
-    },
-    {
-      name: 'Ms. Ahlam Abdushekur',
-      role: 'Secretary',
-      department: 'College of Law',
-      image: '/images/team/ahlam-abdushekur.jpg'
-    }
-  ];
-
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
@@ -60,7 +87,7 @@ const About = () => {
           <div className="text-center">
             <h1 className="text-4xl md:text-5xl font-bold mb-6">About Our Club</h1>
             <p className="text-xl md:text-2xl max-w-3xl mx-auto">
-              Dedicated to creating a drug-free campus environment through education, 
+              Dedicated to creating a drug-free campus environment through education,
               awareness, and unwavering support for all Haramaya University students.
             </p>
           </div>
@@ -77,9 +104,9 @@ const About = () => {
                 <h2 className="text-3xl font-bold text-gray-900">Our Mission</h2>
               </div>
               <p className="text-lg text-gray-600 leading-relaxed">
-                To create a supportive, drug-free environment at Haramaya University where 
-                students can thrive academically, socially, and personally. We are committed 
-                to preventing substance abuse through comprehensive education, raising awareness 
+                To create a supportive, drug-free environment at Haramaya University where
+                students can thrive academically, socially, and personally. We are committed
+                to preventing substance abuse through comprehensive education, raising awareness
                 about the dangers of drug use, and providing confidential support to those in need.
               </p>
             </div>
@@ -90,9 +117,9 @@ const About = () => {
                 <h2 className="text-3xl font-bold text-gray-900">Our Vision</h2>
               </div>
               <p className="text-lg text-gray-600 leading-relaxed">
-                To be the leading student organization in Ethiopia that champions drug-free 
-                living and creates a campus culture where every student feels empowered to 
-                make healthy choices, pursue their academic goals, and contribute positively 
+                To be the leading student organization in Ethiopia that champions drug-free
+                living and creates a campus culture where every student feels empowered to
+                make healthy choices, pursue their academic goals, and contribute positively
                 to society without the influence of harmful substances.
               </p>
             </div>
@@ -135,47 +162,42 @@ const About = () => {
             <div className="card p-6">
               <h3 className="text-xl font-semibold mb-4 text-primary-600">Educational Workshops</h3>
               <p className="text-gray-600">
-                Regular workshops and seminars about drug awareness, health risks, 
+                Regular workshops and seminars about drug awareness, health risks,
                 and the impact of substance abuse on academic and personal life.
               </p>
             </div>
-
             <div className="card p-6">
               <h3 className="text-xl font-semibold mb-4 text-primary-600">Peer Support Programs</h3>
               <p className="text-gray-600">
-                Trained peer counselors provide confidential support and guidance 
+                Trained peer counselors provide confidential support and guidance
                 to students facing challenges with substance abuse.
               </p>
             </div>
-
             <div className="card p-6">
               <h3 className="text-xl font-semibold mb-4 text-primary-600">Awareness Campaigns</h3>
               <p className="text-gray-600">
-                Campus-wide campaigns during key periods like orientation week 
+                Campus-wide campaigns during key periods like orientation week
                 and exam periods to promote drug-free living.
               </p>
             </div>
-
             <div className="card p-6">
               <h3 className="text-xl font-semibold mb-4 text-primary-600">Resource Center</h3>
               <p className="text-gray-600">
-                Comprehensive library of educational materials, research papers, 
+                Comprehensive library of educational materials, research papers,
                 and resources about drug prevention and recovery.
               </p>
             </div>
-
             <div className="card p-6">
               <h3 className="text-xl font-semibold mb-4 text-primary-600">Anonymous Help Line</h3>
               <p className="text-gray-600">
-                24/7 anonymous support system where students can seek help 
+                24/7 anonymous support system where students can seek help
                 without fear of judgment or academic consequences.
               </p>
             </div>
-
             <div className="card p-6">
               <h3 className="text-xl font-semibold mb-4 text-primary-600">Community Outreach</h3>
               <p className="text-gray-600">
-                Extending our mission beyond campus to local communities 
+                Extending our mission beyond campus to local communities
                 and secondary schools in the region.
               </p>
             </div>
@@ -183,7 +205,7 @@ const About = () => {
         </div>
       </section>
 
-      {/* Leadership Team */}
+      {/* Leadership Team — live from Firestore */}
       <section className="py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
@@ -193,33 +215,49 @@ const About = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {team.map((member, index) => (
-              <div key={index} className="card p-6 text-center">
-                <div className="w-28 h-28 rounded-full mx-auto mb-4 overflow-hidden border-4 border-primary-100 shadow-md bg-gray-200 flex items-center justify-center">
-                  {member.image ? (
+          {leadershipLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="card p-6 animate-pulse text-center">
+                  <div className="w-28 h-28 bg-gray-200 rounded-full mx-auto mb-4" />
+                  <div className="h-4 bg-gray-200 rounded mb-2 mx-4" />
+                  <div className="h-3 bg-gray-200 rounded mb-1 mx-8" />
+                  <div className="h-3 bg-gray-200 rounded mx-6" />
+                </div>
+              ))}
+            </div>
+          ) : leaders.length === 0 ? (
+            <div className="text-center py-12">
+              <Award className="h-16 w-16 mx-auto text-gray-300 mb-4" />
+              <p className="text-gray-500 text-lg">Leadership team information coming soon.</p>
+            </div>
+          ) : (
+            <div className={`grid grid-cols-1 md:grid-cols-2 gap-8 ${
+              leaders.length >= 3 ? 'lg:grid-cols-3' : `lg:grid-cols-${leaders.length}`
+            } justify-items-center`}>
+              {leaders.map(member => (
+                <div key={member.id} className="card p-6 text-center w-full max-w-xs">
+                  <div className="w-28 h-28 rounded-full mx-auto mb-4 overflow-hidden border-4 border-primary-100 shadow-md bg-primary-50 flex items-center justify-center">
                     <img
                       src={member.image}
                       alt={member.name}
                       className="w-full h-full object-cover"
-                      onError={(e) => {
-                        // Falls back to icon if the image file is missing
+                      onError={e => {
                         e.currentTarget.style.display = 'none';
-                        e.currentTarget.nextSibling.style.display = 'block';
+                        e.currentTarget.nextSibling.style.display = 'flex';
                       }}
                     />
-                  ) : null}
-                  <User
-                    className="h-14 w-14 text-gray-400"
-                    style={{ display: member.image ? 'none' : 'block' }}
-                  />
+                    <div className="w-full h-full items-center justify-center hidden">
+                      <span className="text-3xl font-bold text-primary-600">{member.initials}</span>
+                    </div>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">{member.name}</h3>
+                  <p className="text-primary-600 font-medium mb-2">{member.role}</p>
+                  <p className="text-sm text-gray-600">{member.department}</p>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">{member.name}</h3>
-                <p className="text-primary-600 font-medium mb-2">{member.role}</p>
-                <p className="text-sm text-gray-600">{member.department}</p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -228,7 +266,7 @@ const About = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Join Our Mission</h2>
           <p className="text-xl mb-8 max-w-2xl mx-auto">
-            Be part of the change. Help us create a healthier, drug-free campus community 
+            Be part of the change. Help us create a healthier, drug-free campus community
             where every student can reach their full potential.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Users, Calendar, FileText, MessageCircle,
   CheckCircle, Clock, Plus, X, Save, Trash2,
-  Edit2
+  Edit2, Award
 } from 'lucide-react';
 import {
   collection, query, getDocs, orderBy,
@@ -12,6 +12,7 @@ import {
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import Members from './Members';
+import Leadership from './Leadership';
 import toast from 'react-hot-toast';
 
 // ─── tiny modal wrapper ───────────────────────────────────────────────────────
@@ -302,6 +303,12 @@ const AdminDashboard = () => {
                 <h3 className="font-semibold text-gray-900">Manage Members</h3>
                 <p className="text-sm text-gray-500">{stats.pendingUsers} pending approval</p>
               </button>
+              <button onClick={() => navigate('/admin/leadership')}
+                className="card p-5 hover:shadow-lg transition-shadow text-left">
+                <MessageCircle className="h-8 w-8 text-purple-600 mb-2" />
+                <h3 className="font-semibold text-gray-900">Leadership</h3>
+                <p className="text-sm text-gray-500">Manage official positions</p>
+              </button>
               <button onClick={() => navigate('/admin/messages')}
                 className="card p-5 hover:shadow-lg transition-shadow text-left">
                 <MessageCircle className="h-8 w-8 text-red-600 mb-2" />
@@ -415,6 +422,9 @@ const AdminDashboard = () => {
 
         {/* ── MEMBERS TAB ── */}
         {activeTab === 'members' && <Members />}
+
+        {/* ── LEADERSHIP TAB ── */}
+        {activeTab === 'leadership' && <Leadership />}
 
         {/* ── MESSAGES TAB ── */}
         {activeTab === 'messages' && (
