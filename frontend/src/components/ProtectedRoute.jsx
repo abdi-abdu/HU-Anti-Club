@@ -20,15 +20,20 @@ const ProtectedRoute = ({ children, requireAdmin = false, requireActive = true }
     );
   }
 
-  // Account not yet approved
+  // Account not yet approved or deactivated
   if (requireActive && userProfile.status !== 'active') {
+    const isDeactivated = userProfile.status === 'deactivated';
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6 text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Account Pending</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+            {isDeactivated ? 'Account Deactivated' : 'Account Pending'}
+          </h2>
           <p className="text-gray-600 mb-4">
-            Your account is pending approval from the club administrators.
-            You'll receive access once your membership is approved.
+            {isDeactivated
+              ? 'Your membership has been deactivated. Please contact the club administrators for assistance.'
+              : "Your account is pending approval from the club administrators. You'll receive access once your membership is approved."
+            }
           </p>
           <p className="text-sm text-gray-500">
             Status:{' '}

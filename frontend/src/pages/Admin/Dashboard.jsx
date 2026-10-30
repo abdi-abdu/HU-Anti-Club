@@ -8,8 +8,10 @@ import {
 import {
   collection, query, getDocs, orderBy,
   updateDoc, doc, addDoc, deleteDoc, serverTimestamp
-} from 'firebase/firestore';import { db } from '../../services/firebase';
+} from 'firebase/firestore';
+import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
+import Members from './Members';
 import toast from 'react-hot-toast';
 
 // ─── tiny modal wrapper ───────────────────────────────────────────────────────
@@ -84,7 +86,7 @@ const AdminDashboard = () => {
       setPosts(postsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setMessages(msgsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setStats({
-        totalUsers:        users.length,
+        totalUsers:        users.filter(u => u.status !== 'deactivated').length,
         pendingUsers:      pending.length,
         totalEvents:       eventsSnap.size,
         totalPosts:        postsSnap.size,
@@ -412,99 +414,7 @@ const AdminDashboard = () => {
         )}
 
         {/* ── MEMBERS TAB ── */}
-        {activeTab === 'members' && (
-          <>
-            <h2 className="text-xl font-bold text-gray-900 mb-6">
-              All Members ({allUsers.length})
-              {stats.pendingUsers > 0 && (
-                <span className="ml-2 bg-yellow-100 text-yellow-800 text-sm font-medium px-2.5 py-0.5 rounded-full">
-                  {stats.pendingUsers} pending
-                </span>
-              )}
-            </h2>
-
-            <div className="card overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600 hidden md:table-cell">ID / Department</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Role</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {allUsers.map(user => (
-                    <tr key={user.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-gray-900">{user.fullName}</p>
-                        <p className="text-gray-500 text-xs">{user.email}</p>
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell text-gray-600">
-                        <p>{user.universityId}</p>
-                        <p className="text-xs text-gray-400">{user.department}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          user.status === 'active'   ? 'bg-green-100 text-green-800' :
-                          user.status === 'pending'  ? 'bg-yellow-100 text-yellow-800' :
-                                                       'bg-red-100 text-red-800'
-                        }`}>
-                          {user.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {user.role}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {user.status === 'pending' && (
-                            <button onClick={() => updateUser(user.id, { status: 'active' }, 'User approved!')}
-                              className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs">
-                              Approve
-                            </button>
-                          )}
-                          {user.status === 'pending' && (
-                            <button onClick={() => updateUser(user.id, { status: 'rejected' }, 'User rejected')}
-                              className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs">
-                              Reject
-                            </button>
-                          )}
-                          {user.role !== 'admin' && user.status === 'active' && (
-                            <button onClick={() => updateUser(user.id, { role: 'admin' }, 'Promoted to admin!')}
-                              className="bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded text-xs">
-                              Make Admin
-                            </button>
-                          )}
-                          {user.role === 'admin' && user.id !== currentUser?.uid && (
-                            <button onClick={() => updateUser(user.id, { role: 'student' }, 'Admin access removed')}
-                              className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 rounded text-xs">
-                              Remove Admin
-                            </button>
-                          )}
-                          {user.role === 'admin' && user.id === currentUser?.uid && (
-                            <span className="text-xs text-gray-400 italic">You</span>
-                          )}
-                          {user.status === 'active' && (
-                            <button onClick={() => updateUser(user.id, { status: 'pending' }, 'User suspended')}
-                              className="bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs">
-                              Suspend
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+        {activeTab === 'members' && <Members />}
 
         {/* ── MESSAGES TAB ── */}
         {activeTab === 'messages' && (
