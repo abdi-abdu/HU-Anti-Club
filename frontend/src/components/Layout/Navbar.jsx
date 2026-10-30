@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Menu, X, User, LogOut, LayoutDashboard, Calendar, FileText, MessageCircle, BookOpen, Users } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -29,11 +29,11 @@ const Navbar = () => {
 
   // ── admin dashboard nav ──────────────────────────────────────────────────
   const adminLinks = [
-    { to: '/admin',         label: 'Overview',      icon: LayoutDashboard },
-    { to: '/admin#events',  label: 'Events',        icon: Calendar        },
-    { to: '/admin#posts',   label: 'Blog Posts',    icon: FileText        },
-    { to: '/admin#members', label: 'Members',       icon: Users           },
-    { to: '/admin#messages',label: 'Help Messages', icon: MessageCircle   },
+    { to: '/admin',          label: 'Overview',      icon: LayoutDashboard },
+    { to: '/admin/events',   label: 'Events',        icon: Calendar        },
+    { to: '/admin/posts',    label: 'Blog Posts',    icon: FileText        },
+    { to: '/admin/members',  label: 'Members',       icon: Users           },
+    { to: '/admin/messages', label: 'Help Messages', icon: MessageCircle   },
   ];
 
   // ── student dashboard nav ────────────────────────────────────────────────
@@ -49,6 +49,7 @@ const Navbar = () => {
   const isStudent = currentUser && userProfile?.role !== 'admin';
 
   const dashboardLinks = isAdmin ? adminLinks : studentLinks;
+  const location = useLocation();
 
   return (
     <nav className="bg-white shadow-lg sticky top-0 z-50">
@@ -80,7 +81,11 @@ const Navbar = () => {
             {/* Logged in: show role-specific dashboard links */}
             {currentUser && dashboardLinks.map(link => (
               <Link key={link.label} to={link.to}
-                className="flex items-center gap-1.5 text-gray-700 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium transition-colors">
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  location.pathname === link.to
+                    ? 'bg-primary-50 text-primary-600'
+                    : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+                }`}>
                 <link.icon className="h-4 w-4" />
                 {link.label}
               </Link>
@@ -155,7 +160,11 @@ const Navbar = () => {
               {/* Logged-in dashboard links */}
               {currentUser && dashboardLinks.map(link => (
                 <Link key={link.label} to={link.to}
-                  className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600"
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium ${
+                    location.pathname === link.to
+                      ? 'bg-primary-50 text-primary-600'
+                      : 'text-gray-700 hover:text-primary-600'
+                  }`}
                   onClick={() => setIsOpen(false)}>
                   <link.icon className="h-4 w-4" />
                   {link.label}

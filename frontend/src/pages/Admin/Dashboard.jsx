@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Users, Calendar, FileText, MessageCircle,
   CheckCircle, Clock, Plus, X, Save, Trash2,
-  Edit2, Eye, ChevronDown
+  Edit2
 } from 'lucide-react';
 import {
   collection, query, getDocs, orderBy,
@@ -26,19 +27,15 @@ const Modal = ({ title, onClose, children }) => (
   </div>
 );
 
-// ─── tab list ────────────────────────────────────────────────────────────────
-const TABS = [
-  { id: 'overview',  label: 'Overview',       icon: ChevronDown  },
-  { id: 'events',    label: 'Events',          icon: Calendar     },
-  { id: 'posts',     label: 'Blog Posts',      icon: FileText     },
-  { id: 'members',   label: 'Members',         icon: Users        },
-  { id: 'messages',  label: 'Help Messages',   icon: MessageCircle },
-];
 
 // ─── main component ───────────────────────────────────────────────────────────
 const AdminDashboard = () => {
   const { currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState('overview');
+  const { tab } = useParams();
+  const navigate = useNavigate();
+
+  // derive active tab from URL — default to 'overview'
+  const activeTab = tab || 'overview';
 
   // data
   const [stats, setStats]               = useState({ totalUsers: 0, pendingUsers: 0, totalEvents: 0, totalPosts: 0, anonymousMessages: 0 });
@@ -256,30 +253,6 @@ const AdminDashboard = () => {
           <p className="text-gray-600">Manage club members, events, articles, and help messages</p>
         </div>
 
-        {/* Tab Bar */}
-        <div className="flex flex-wrap gap-1 bg-white rounded-xl p-1 shadow-sm mb-8 border border-gray-200">
-          {TABS.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === tab.id
-                  ? 'bg-primary-600 text-white shadow'
-                  : 'text-gray-600 hover:text-primary-600 hover:bg-primary-50'
-              }`}
-            >
-              <tab.icon className="h-4 w-4" />
-              {tab.label}
-              {tab.id === 'members'  && stats.pendingUsers > 0  && (
-                <span className="bg-yellow-400 text-yellow-900 text-xs px-1.5 py-0.5 rounded-full">{stats.pendingUsers}</span>
-              )}
-              {tab.id === 'messages' && messages.filter(m => !m.isReplied).length > 0 && (
-                <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">{messages.filter(m => !m.isReplied).length}</span>
-              )}
-            </button>
-          ))}
-        </div>
-
         {/* ── OVERVIEW TAB ── */}
         {activeTab === 'overview' && (
           <>
@@ -309,25 +282,25 @@ const AdminDashboard = () => {
             {/* Quick Actions */}
             <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <button onClick={() => { setActiveTab('events'); openCreateEvent(); }}
+              <button onClick={() => { navigate('/admin/events'); openCreateEvent(); }}
                 className="card p-5 hover:shadow-lg transition-shadow text-left">
                 <Calendar className="h-8 w-8 text-primary-600 mb-2" />
                 <h3 className="font-semibold text-gray-900">Create Event</h3>
                 <p className="text-sm text-gray-500">Add a new awareness event</p>
               </button>
-              <button onClick={() => { setActiveTab('posts'); openCreatePost(); }}
+              <button onClick={() => { navigate('/admin/posts'); openCreatePost(); }}
                 className="card p-5 hover:shadow-lg transition-shadow text-left">
                 <FileText className="h-8 w-8 text-secondary-600 mb-2" />
                 <h3 className="font-semibold text-gray-900">Write Article</h3>
                 <p className="text-sm text-gray-500">Publish a new blog post</p>
               </button>
-              <button onClick={() => setActiveTab('members')}
+              <button onClick={() => navigate('/admin/members')}
                 className="card p-5 hover:shadow-lg transition-shadow text-left">
                 <Users className="h-8 w-8 text-blue-600 mb-2" />
                 <h3 className="font-semibold text-gray-900">Manage Members</h3>
                 <p className="text-sm text-gray-500">{stats.pendingUsers} pending approval</p>
               </button>
-              <button onClick={() => setActiveTab('messages')}
+              <button onClick={() => navigate('/admin/messages')}
                 className="card p-5 hover:shadow-lg transition-shadow text-left">
                 <MessageCircle className="h-8 w-8 text-red-600 mb-2" />
                 <h3 className="font-semibold text-gray-900">Help Messages</h3>

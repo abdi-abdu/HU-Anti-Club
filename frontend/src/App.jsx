@@ -54,7 +54,12 @@ function AppRoutes() {
           } />
 
           {/* Protected admin route */}
-          <Route path="/admin/*" element={
+          <Route path="/admin" element={
+            <ProtectedRoute requireAdmin={true}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/:tab" element={
             <ProtectedRoute requireAdmin={true}>
               <AdminDashboard />
             </ProtectedRoute>
