@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Users, Search, Plus, Edit2, X, Save,
-  ChevronDown, ChevronUp, Mail, Phone,
-  GraduationCap, Calendar, Shield, AlertTriangle, Eye
+  Users, Search, Edit2, X, Save,
+  ChevronDown, ChevronUp, Phone,
+  GraduationCap, Calendar, Shield, AlertTriangle, Eye, Award
 } from 'lucide-react';
 import {
   collection, getDocs, doc, updateDoc,
-  serverTimestamp, query, orderBy
+  serverTimestamp, query, orderBy, where
 } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
+import { POSITIONS } from './Leadership';
 import toast from 'react-hot-toast';
 
 // ── Modal wrapper ─────────────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ const Modal = ({ title, onClose, children, size = 'md' }) => {
   );
 };
 
-// ── Status badge ──────────────────────────────────────────────────────────────
+// ── Badges ────────────────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => {
   const styles = {
     active:      'bg-green-100 text-green-800',
@@ -45,16 +46,27 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-// ── Role badge ────────────────────────────────────────────────────────────────
+// Website access role (admin / student) — purple / blue
 const RoleBadge = ({ role }) => (
   <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${
     role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
   }`}>
-    {role}
+    {role === 'admin' ? '⚙ Admin' : 'Student'}
   </span>
 );
 
-// ── COLLEGES list (reused from Register) ─────────────────────────────────────
+// Club position badge (President / VP / Secretary) — amber
+const PositionBadge = ({ positionId }) => {
+  if (!positionId) return <span className="text-xs text-gray-400">—</span>;
+  const label = POSITIONS.find(p => p.id === positionId)?.label || positionId;
+  return (
+    <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+      {label}
+    </span>
+  );
+};
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 const COLLEGES = [
   'College of Agriculture and Environmental Sciences',
   'College of Business and Economics',
@@ -66,7 +78,6 @@ const COLLEGES = [
   'College of Social Sciences and Humanities',
   'College of Veterinary Medicine',
 ];
-
 const YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year', '5th Year', 'Graduate'];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -74,39 +85,61 @@ const Members = () => {
   const { currentUser } = useAuth();
 
   const [members,        setMembers]        = useState([]);
+  // map: memberId → current active position id
+  const [positionMap,    setPositionMap]    = useState({});
   const [loading,        setLoading]        = useState(true);
   const [searchQuery,    setSearchQuery]    = useState('');
   const [statusFilter,   setStatusFilter]   = useState('all');
   const [roleFilter,     setRoleFilter]     = useState('all');
+  const [positionFilter, setPositionFilter] = useState('all');
   const [sortField,      setSortField]      = useState('fullName');
   const [sortDir,        setSortDir]        = useState('asc');
 
   // modals
   const [viewModal,      setViewModal]      = useState(false);
   const [editModal,      setEditModal]      = useState(false);
-  const [confirmModal,   setConfirmModal]   = useState(null); // { action, userId, label }
+  const [confirmModal,   setConfirmModal]   = useState(null);
   const [selectedMember, setSelectedMember] = useState(null);
 
   // edit form
   const emptyEdit = { fullName: '', phone: '', department: '', yearOfStudy: '', college: '' };
-  const [editForm,       setEditForm]       = useState(emptyEdit);
-  const [editSaving,     setEditSaving]     = useState(false);
+  const [editForm,   setEditForm]   = useState(emptyEdit);
+  const [editSaving, setEditSaving] = useState(false);
 
-  // ── fetch ─────────────────────────────────────────────────────────────────
-  const fetchMembers = useCallback(async () => {
+  // ── fetch members + active leadership ────────────────────────────────────
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const snap = await getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc')));
-      setMembers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const [usersSnap, leadershipSnap] = await Promise.all([
+        getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc'))),
+        // fetch only active appointments to build the position map
+        getDocs(query(collection(db, 'leadership'), where('status', '==', 'active'))),
+      ]);
+
+      // build memberId → positionId map
+      const pMap = {};
+      leadershipSnap.docs.forEach(d => {
+        const { memberId, position } = d.data();
+        if (memberId && position) pMap[memberId] = position;
+      });
+
+      setMembers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setPositionMap(pMap);
     } catch (err) {
       console.error(err);
-      toast.error('Failed to load members');
+      // Fallback: load members without leadership data if leadership query fails
+      try {
+        const usersSnap = await getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc')));
+        setMembers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (e) {
+        toast.error('Failed to load members');
+      }
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchMembers(); }, [fetchMembers]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   // ── filter + sort ─────────────────────────────────────────────────────────
   const filtered = members
@@ -117,9 +150,15 @@ const Members = () => {
         m.email?.toLowerCase().includes(q) ||
         m.universityId?.toLowerCase().includes(q) ||
         m.department?.toLowerCase().includes(q);
-      const matchesStatus = statusFilter === 'all' || m.status === statusFilter;
-      const matchesRole   = roleFilter   === 'all' || m.role   === roleFilter;
-      return matchesSearch && matchesStatus && matchesRole;
+      const matchesStatus   = statusFilter   === 'all' || m.status === statusFilter;
+      const matchesRole     = roleFilter     === 'all' || m.role   === roleFilter;
+      const memberPosition  = positionMap[m.id] || null;
+      const matchesPosition = positionFilter === 'all'
+        ? true
+        : positionFilter === 'none'
+          ? !memberPosition
+          : memberPosition === positionFilter;
+      return matchesSearch && matchesStatus && matchesRole && matchesPosition;
     })
     .sort((a, b) => {
       const av = (a[sortField] || '').toString().toLowerCase();
@@ -134,15 +173,17 @@ const Members = () => {
 
   const SortIcon = ({ field }) =>
     sortField === field
-      ? sortDir === 'asc' ? <ChevronUp className="h-3 w-3 inline ml-1" /> : <ChevronDown className="h-3 w-3 inline ml-1" />
+      ? sortDir === 'asc'
+        ? <ChevronUp className="h-3 w-3 inline ml-1" />
+        : <ChevronDown className="h-3 w-3 inline ml-1" />
       : null;
 
-  // ── actions ───────────────────────────────────────────────────────────────
+  // ── Firestore actions ─────────────────────────────────────────────────────
   const doUpdate = async (userId, data, successMsg) => {
     try {
       await updateDoc(doc(db, 'users', userId), { ...data, updatedAt: serverTimestamp() });
       toast.success(successMsg);
-      fetchMembers();
+      fetchData();
     } catch (err) {
       console.error(err);
       toast.error('Action failed. Please try again.');
@@ -153,21 +194,20 @@ const Members = () => {
     if (!confirmModal) return;
     const { action, userId } = confirmModal;
     setConfirmModal(null);
-    if (action === 'approve')    await doUpdate(userId, { status: 'active' },      'Member approved ✓');
-    if (action === 'reject')     await doUpdate(userId, { status: 'rejected' },    'Member rejected');
-    if (action === 'deactivate') await doUpdate(userId, { status: 'deactivated' }, 'Member deactivated');
-    if (action === 'reactivate') await doUpdate(userId, { status: 'active' },      'Member reactivated ✓');
-    if (action === 'makeAdmin')  await doUpdate(userId, { role: 'admin', status: 'active' }, 'Promoted to admin ✓');
-    if (action === 'removeAdmin')await doUpdate(userId, { role: 'student' },       'Admin access removed');
+    if (action === 'approve')     await doUpdate(userId, { status: 'active' },      'Member approved ✓');
+    if (action === 'reject')      await doUpdate(userId, { status: 'rejected' },    'Member rejected');
+    if (action === 'deactivate')  await doUpdate(userId, { status: 'deactivated' }, 'Member deactivated');
+    if (action === 'reactivate')  await doUpdate(userId, { status: 'active' },      'Member reactivated ✓');
+    if (action === 'makeAdmin')   await doUpdate(userId, { role: 'admin', status: 'active' }, 'Promoted to admin ✓');
+    if (action === 'removeAdmin') await doUpdate(userId, { role: 'student' },       'Admin access removed');
   };
 
   const confirm = (action, member, label) =>
     setConfirmModal({ action, userId: member.id, memberName: member.fullName, label });
 
-  // ── view detail ────────────────────────────────────────────────────────────
+  // ── modals ────────────────────────────────────────────────────────────────
   const openView = (member) => { setSelectedMember(member); setViewModal(true); };
 
-  // ── edit ─────────────────────────────────────────────────────────────────
   const openEdit = (member) => {
     setSelectedMember(member);
     setEditForm({
@@ -195,13 +235,11 @@ const Members = () => {
       });
       toast.success('Member information updated ✓');
       setEditModal(false);
-      fetchMembers();
+      fetchData();
     } catch (err) {
       console.error(err);
       toast.error('Failed to save changes');
-    } finally {
-      setEditSaving(false);
-    }
+    } finally { setEditSaving(false); }
   };
 
   const formatDate = (ts) => {
@@ -216,6 +254,7 @@ const Members = () => {
     active:      members.filter(m => m.status === 'active').length,
     pending:     members.filter(m => m.status === 'pending').length,
     deactivated: members.filter(m => m.status === 'deactivated' || m.status === 'rejected').length,
+    officials:   Object.keys(positionMap).length,
   };
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -226,11 +265,26 @@ const Members = () => {
         <div>
           <h2 className="text-xl font-bold text-gray-900">Member Management</h2>
           <p className="text-sm text-gray-500 mt-0.5">
-            {counts.total} total · {counts.active} active · {counts.pending} pending
+            {counts.total} total · {counts.active} active · {counts.pending} pending · {counts.officials} officials
           </p>
         </div>
-        <div className="text-sm text-gray-500 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-          💡 New members register via the public <strong>/register</strong> page
+        <div className="text-sm text-gray-500 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 max-w-xs">
+          💡 New members register via <strong>/register</strong>. Assign club positions via <strong>Leadership</strong>.
+        </div>
+      </div>
+
+      {/* Concept clarification banner */}
+      <div className="card p-4 mb-4 bg-amber-50 border border-amber-200">
+        <div className="flex items-start gap-3">
+          <Award className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-medium text-amber-900">Two separate concepts</p>
+            <p className="text-amber-700 mt-0.5">
+              <strong>Website Role</strong> (Admin / Student) controls dashboard access. &nbsp;|&nbsp;
+              <strong>Club Position</strong> (President / VP / Secretary) is the official club appointment —
+              managed in the <strong>Leadership</strong> section.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -240,7 +294,7 @@ const Members = () => {
           { label: 'Total Members',    value: counts.total,       color: 'blue'   },
           { label: 'Active',           value: counts.active,      color: 'green'  },
           { label: 'Pending Approval', value: counts.pending,     color: 'yellow' },
-          { label: 'Deactivated',      value: counts.deactivated, color: 'gray'   },
+          { label: 'Club Officials',   value: counts.officials,   color: 'amber'  },
         ].map(s => (
           <div key={s.label} className="card p-4">
             <p className="text-xs text-gray-500">{s.label}</p>
@@ -251,9 +305,9 @@ const Members = () => {
 
       {/* Filters */}
       <div className="card p-4 mb-4">
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
           {/* Search */}
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-48">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               type="text"
@@ -264,26 +318,29 @@ const Members = () => {
             />
           </div>
           {/* Status filter */}
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-            className="input-field py-2 w-full sm:w-40"
-          >
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+            className="input-field py-2 w-full sm:w-40">
             <option value="all">All Statuses</option>
             <option value="active">Active</option>
             <option value="pending">Pending</option>
             <option value="rejected">Rejected</option>
             <option value="deactivated">Deactivated</option>
           </select>
-          {/* Role filter */}
-          <select
-            value={roleFilter}
-            onChange={e => setRoleFilter(e.target.value)}
-            className="input-field py-2 w-full sm:w-36"
-          >
-            <option value="all">All Roles</option>
-            <option value="admin">Admin</option>
-            <option value="student">Student</option>
+          {/* Website role filter */}
+          <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}
+            className="input-field py-2 w-full sm:w-40">
+            <option value="all">All Web Roles</option>
+            <option value="admin">Admin (website)</option>
+            <option value="student">Student (website)</option>
+          </select>
+          {/* Club position filter */}
+          <select value={positionFilter} onChange={e => setPositionFilter(e.target.value)}
+            className="input-field py-2 w-full sm:w-44">
+            <option value="all">All Club Positions</option>
+            {POSITIONS.map(p => (
+              <option key={p.id} value={p.id}>{p.label}</option>
+            ))}
+            <option value="none">No position</option>
           </select>
         </div>
       </div>
@@ -299,7 +356,7 @@ const Members = () => {
           <Users className="h-16 w-16 mx-auto text-gray-300 mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">No members found</h3>
           <p className="text-gray-500">
-            {searchQuery || statusFilter !== 'all' || roleFilter !== 'all'
+            {searchQuery || statusFilter !== 'all' || roleFilter !== 'all' || positionFilter !== 'all'
               ? 'Try adjusting your search or filters.'
               : 'No members have registered yet.'}
           </p>
@@ -323,7 +380,14 @@ const Members = () => {
                     onClick={() => toggleSort('status')}>
                     Status <SortIcon field="status" />
                   </th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Role</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">
+                    Web Role
+                    <span className="ml-1 text-gray-400 font-normal text-xs">(access)</span>
+                  </th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">
+                    Club Position
+                    <span className="ml-1 text-gray-400 font-normal text-xs">(appointment)</span>
+                  </th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600 cursor-pointer select-none hover:text-gray-900"
                     onClick={() => toggleSort('createdAt')}>
                     Joined <SortIcon field="createdAt" />
@@ -347,6 +411,9 @@ const Members = () => {
                     </td>
                     <td className="px-4 py-3">
                       <RoleBadge role={member.role} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <PositionBadge positionId={positionMap[member.id]} />
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500">
                       {formatDate(member.createdAt)}
@@ -379,6 +446,9 @@ const Members = () => {
                   <div className="flex flex-col gap-1 items-end">
                     <StatusBadge status={member.status} />
                     <RoleBadge role={member.role} />
+                    {positionMap[member.id] && (
+                      <PositionBadge positionId={positionMap[member.id]} />
+                    )}
                   </div>
                 </div>
                 <ActionButtons
@@ -402,7 +472,6 @@ const Members = () => {
       {viewModal && selectedMember && (
         <Modal title="Member Details" onClose={() => setViewModal(false)} size="md">
           <div className="space-y-4">
-            {/* Avatar + name */}
             <div className="flex items-center gap-4 pb-4 border-b border-gray-100">
               <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
                 <span className="text-2xl font-bold text-primary-600">
@@ -412,18 +481,20 @@ const Members = () => {
               <div>
                 <h3 className="text-xl font-bold text-gray-900">{selectedMember.fullName}</h3>
                 <p className="text-gray-500 text-sm">{selectedMember.email}</p>
-                <div className="flex gap-2 mt-1">
+                <div className="flex flex-wrap gap-2 mt-1">
                   <StatusBadge status={selectedMember.status} />
                   <RoleBadge role={selectedMember.role} />
+                  {positionMap[selectedMember.id] && (
+                    <PositionBadge positionId={positionMap[selectedMember.id]} />
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Details grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {[
                 { icon: GraduationCap, label: 'University ID',  value: selectedMember.universityId },
-                { icon: Phone,         label: 'Phone',          value: selectedMember.phone         },
+                { icon: GraduationCap, label: 'Phone',          value: selectedMember.phone         },
                 { icon: GraduationCap, label: 'College',        value: selectedMember.college       },
                 { icon: GraduationCap, label: 'Department',     value: selectedMember.department    },
                 { icon: Calendar,      label: 'Year of Study',  value: selectedMember.yearOfStudy   },
@@ -439,9 +510,21 @@ const Members = () => {
               ))}
             </div>
 
+            {/* Club position note */}
+            {positionMap[selectedMember.id] && (
+              <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <Award className="h-4 w-4 text-amber-600" />
+                <p className="text-sm text-amber-800">
+                  Currently serving as <strong>
+                    {POSITIONS.find(p => p.id === positionMap[selectedMember.id])?.label}
+                  </strong>.
+                  Manage this in the <strong>Leadership</strong> section.
+                </p>
+              </div>
+            )}
+
             <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => { setViewModal(false); openEdit(selectedMember); }}
+              <button onClick={() => { setViewModal(false); openEdit(selectedMember); }}
                 className="btn-primary flex items-center gap-2 flex-1">
                 <Edit2 className="h-4 w-4" /> Edit Member
               </button>
@@ -474,8 +557,7 @@ const Members = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">College</label>
-              <select
-                value={editForm.college}
+              <select value={editForm.college}
                 onChange={e => setEditForm({ ...editForm, college: e.target.value })}
                 className="input-field">
                 <option value="">Select college</option>
@@ -491,20 +573,17 @@ const Members = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Year of Study</label>
-              <select
-                value={editForm.yearOfStudy}
+              <select value={editForm.yearOfStudy}
                 onChange={e => setEditForm({ ...editForm, yearOfStudy: e.target.value })}
                 className="input-field">
                 <option value="">Select year</option>
                 {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
-
-            {/* Read-only fields notice */}
             <p className="text-xs text-gray-400 bg-gray-50 rounded p-2">
-              Email and University ID cannot be changed here. University ID is set at registration.
+              Email and University ID cannot be changed. To assign a club position (President/VP/Secretary),
+              use the <strong>Leadership</strong> section.
             </p>
-
             <div className="flex gap-3 pt-2">
               <button type="submit" disabled={editSaving}
                 className="btn-primary flex items-center gap-2 flex-1 disabled:opacity-50">
@@ -533,10 +612,7 @@ const Members = () => {
             </div>
           </div>
           <div className="flex gap-3">
-            <button onClick={handleConfirmedAction}
-              className="btn-primary flex-1">
-              Confirm
-            </button>
+            <button onClick={handleConfirmedAction} className="btn-primary flex-1">Confirm</button>
             <button onClick={() => setConfirmModal(null)}
               className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg flex-1">
               Cancel
@@ -548,79 +624,43 @@ const Members = () => {
   );
 };
 
-// ── Action buttons component ──────────────────────────────────────────────────
+// ── Action buttons ────────────────────────────────────────────────────────────
 const ActionButtons = ({ member, currentUid, onView, onEdit, onConfirm }) => {
   const isSelf = member.id === currentUid;
-
   return (
     <div className="flex flex-wrap gap-1">
-      {/* View */}
       <button onClick={() => onView(member)}
         className="flex items-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs transition-colors">
         <Eye className="h-3 w-3" /> View
       </button>
-
-      {/* Edit */}
       <button onClick={() => onEdit(member)}
         className="flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs transition-colors">
         <Edit2 className="h-3 w-3" /> Edit
       </button>
-
-      {/* Approve */}
       {member.status === 'pending' && (
-        <button
-          onClick={() => onConfirm('approve', member, 'Approve this member and grant access?')}
-          className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs transition-colors">
-          Approve
-        </button>
+        <button onClick={() => onConfirm('approve', member, 'Approve this member and grant access?')}
+          className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs">Approve</button>
       )}
-
-      {/* Reject */}
       {member.status === 'pending' && (
-        <button
-          onClick={() => onConfirm('reject', member, 'Reject this membership application?')}
-          className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs transition-colors">
-          Reject
-        </button>
+        <button onClick={() => onConfirm('reject', member, 'Reject this membership application?')}
+          className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs">Reject</button>
       )}
-
-      {/* Deactivate active members */}
       {member.status === 'active' && !isSelf && (
-        <button
-          onClick={() => onConfirm('deactivate', member, 'Deactivate this membership? The member will lose access.')}
-          className="bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors">
-          Deactivate
-        </button>
+        <button onClick={() => onConfirm('deactivate', member, 'Deactivate this membership?')}
+          className="bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs">Deactivate</button>
       )}
-
-      {/* Reactivate deactivated/rejected members */}
       {(member.status === 'deactivated' || member.status === 'rejected') && (
-        <button
-          onClick={() => onConfirm('reactivate', member, 'Reactivate this membership and restore access?')}
-          className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs transition-colors">
-          Reactivate
-        </button>
+        <button onClick={() => onConfirm('reactivate', member, 'Reactivate this membership?')}
+          className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs">Reactivate</button>
       )}
-
-      {/* Make admin */}
       {member.role !== 'admin' && member.status === 'active' && (
-        <button
-          onClick={() => onConfirm('makeAdmin', member, 'Grant full admin access to this member?')}
-          className="bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded text-xs transition-colors">
-          Make Admin
-        </button>
+        <button onClick={() => onConfirm('makeAdmin', member, 'Grant full admin access to this member?')}
+          className="bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded text-xs">Make Admin</button>
       )}
-
-      {/* Remove admin */}
       {member.role === 'admin' && !isSelf && (
-        <button
-          onClick={() => onConfirm('removeAdmin', member, 'Remove admin access from this member?')}
-          className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 rounded text-xs transition-colors">
-          Remove Admin
-        </button>
+        <button onClick={() => onConfirm('removeAdmin', member, 'Remove admin access from this member?')}
+          className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 rounded text-xs">Remove Admin</button>
       )}
-
-      {/* Self indicator */}
       {isSelf && (
         <span className="text-xs text-gray-400 italic px-2 py-1">You</span>
       )}
