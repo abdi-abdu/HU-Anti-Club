@@ -26,20 +26,28 @@ const About = () => {
 
         const appts = apptSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
+        // Only show appointments that are active AND showPublicly is not false
+        const publicAppts = appts.filter(a => a.showPublicly !== false);
+
         // Sort by position order defined in POSITIONS
         const posOrder = POSITIONS.reduce((acc, p, i) => { acc[p.id] = i; return acc; }, {});
-        appts.sort((a, b) => (posOrder[a.position] ?? 99) - (posOrder[b.position] ?? 99));
+        publicAppts.sort((a, b) => (posOrder[a.position] ?? 99) - (posOrder[b.position] ?? 99));
 
-        const mapped = appts.map(appt => {
+        const mapped = publicAppts.map(appt => {
           const member = usersMap[appt.memberId] || {};
           const posLabel = POSITIONS.find(p => p.id === appt.position)?.label || appt.position;
+
+          // Photo resolution priority:
+          // 1. appointment.photoUrl (uploaded or pasted URL — also handles future Firebase Storage URLs)
+          // 2. local /images/team/{memberId}.jpg fallback
+          // Both are passed to the card; the card handles the onError fallback
           return {
             id:         appt.id,
             name:       member.fullName   || 'Unknown',
             role:       posLabel,
             department: member.college    || member.department || '',
-            // Use team photo if present, otherwise null (shows initials fallback)
-            image:      `/images/team/${appt.memberId}.jpg`,
+            photoUrl:   appt.photoUrl     || null,   // priority 1
+            localPhoto: `/images/team/${appt.memberId}.jpg`, // priority 2
             initials:   (member.fullName || 'U').charAt(0).toUpperCase(),
           };
         });
@@ -238,13 +246,20 @@ const About = () => {
               {leaders.map(member => (
                 <div key={member.id} className="card p-6 text-center w-full max-w-xs">
                   <div className="w-28 h-28 rounded-full mx-auto mb-4 overflow-hidden border-4 border-primary-100 shadow-md bg-primary-50 flex items-center justify-center">
+                    {/* Try photoUrl first, fall back to localPhoto, then initials */}
                     <img
-                      src={member.image}
+                      src={member.photoUrl || member.localPhoto}
                       alt={member.name}
                       className="w-full h-full object-cover"
                       onError={e => {
-                        e.currentTarget.style.display = 'none';
-                        e.currentTarget.nextSibling.style.display = 'flex';
+                        // If photoUrl failed, try localPhoto
+                        if (member.photoUrl && e.target.src !== member.localPhoto) {
+                          e.target.src = member.localPhoto;
+                        } else {
+                          // Both failed — show initials
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
+                        }
                       }}
                     />
                     <div className="w-full h-full items-center justify-center hidden">
