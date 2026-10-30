@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Calendar, BookOpen, Heart, ArrowRight, Bell } from 'lucide-react';
-import { collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { getTypeConfig } from './Admin/Announcements';
 
@@ -14,36 +14,29 @@ const Home = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch recent published events
-        const eventsQuery = query(
-          collection(db, 'events'),
-          where('status', '==', 'published'),
-          orderBy('createdAt', 'desc'),
-          limit(3)
+        // Fetch recent published events — fetch all then filter/sort client-side
+        // to avoid composite index requirement (status + createdAt)
+        const eventsSnapshot = await getDocs(
+          query(collection(db, 'events'), orderBy('createdAt', 'desc'), limit(20))
         );
-        const eventsSnapshot = await getDocs(eventsQuery);
-        setRecentEvents(eventsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const allEvents = eventsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setRecentEvents(allEvents.filter(e => e.status === 'published').slice(0, 3));
 
         // Fetch recent posts
-        const postsQuery = query(
-          collection(db, 'posts'),
-          orderBy('createdAt', 'desc'),
-          limit(3)
+        const postsSnapshot = await getDocs(
+          query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(3))
         );
-        const postsSnapshot = await getDocs(postsQuery);
         setRecentPosts(postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
-        // Fetch published announcements (latest 5)
+        // Fetch published announcements — filter client-side to avoid index requirement
         try {
-          const annQuery = query(
-            collection(db, 'announcements'),
-            where('published', '==', true),
-            orderBy('createdAt', 'desc'),
-            limit(5)
+          const annSnapshot = await getDocs(
+            query(collection(db, 'announcements'), orderBy('createdAt', 'desc'), limit(20))
           );
-          const annSnapshot = await getDocs(annQuery);
-          setAnnouncements(annSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        } catch { /* announcements collection may not exist yet */ }
+          const allAnn = annSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setAnnouncements(allAnn.filter(a => a.published).slice(0, 5));
+        } catch { /* announcements collection may not exist yet — silently skip */ }
+
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {

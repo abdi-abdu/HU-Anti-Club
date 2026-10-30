@@ -28,24 +28,27 @@ const Events = () => {
         const now = Timestamp.now();
         let eventsQuery;
 
+        // Fetch all events ordered by date, filter client-side to avoid
+        // composite index requirement for status + date
         if (filter === 'upcoming') {
           eventsQuery = query(
             collection(db, 'events'),
-            where('status', '==', 'published'),
             where('date', '>=', now),
             orderBy('date', 'asc')
           );
         } else {
           eventsQuery = query(
             collection(db, 'events'),
-            where('status', '==', 'published'),
             where('date', '<', now),
             orderBy('date', 'desc')
           );
         }
 
         const snap = await getDocs(eventsQuery);
-        const evList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // Filter to only published events client-side
+        const evList = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter(ev => ev.status === 'published');
         setEvents(evList);
 
         // for each event fetch registration count + whether current user registered

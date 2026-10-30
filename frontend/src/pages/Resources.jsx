@@ -9,8 +9,15 @@ const Resources = () => {
   const [loading, setLoading] = useState(true);
   const { currentUser, userProfile } = useAuth();
 
+  const isAuthenticated = currentUser && userProfile?.status === 'active';
+
   useEffect(() => {
     const fetchResources = async () => {
+      // Only fetch if user is authenticated and active — rules block unauthenticated reads
+      if (!isAuthenticated) {
+        setLoading(false);
+        return;
+      }
       try {
         const resourcesQuery = query(collection(db, 'resources'), orderBy('createdAt', 'desc'));
         const resourcesSnapshot = await getDocs(resourcesQuery);
@@ -23,7 +30,7 @@ const Resources = () => {
     };
 
     fetchResources();
-  }, []);
+  }, [isAuthenticated]);
 
   const getFileIcon = (fileName) => {
     if (!fileName) return FileText;
@@ -107,8 +114,6 @@ const Resources = () => {
       category: 'Prevention'
     }
   ];
-
-  const isAuthenticated = currentUser && userProfile?.status === 'active';
 
   return (
     <div className="min-h-screen">
