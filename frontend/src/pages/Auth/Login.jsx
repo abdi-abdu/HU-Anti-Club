@@ -5,15 +5,18 @@ import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 
 const Login = () => {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
+  const [formData, setFormData] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  
-  const { signin } = useAuth();
+
+  const { signin, currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
+
+  // already logged in → redirect immediately
+  if (currentUser && userProfile) {
+    if (userProfile.role === 'admin') return navigate('/admin');
+    return navigate('/profile');
+  }
 
   const handleChange = (e) => {
     setFormData({
@@ -25,10 +28,14 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-
     try {
-      await signin(formData.email, formData.password);
-      navigate('/');
+      const { user, profile } = await signin(formData.email, formData.password);
+      // signin returns the profile so we can redirect immediately
+      if (profile?.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/profile');
+      }
     } catch (error) {
       console.error('Login error:', error);
     } finally {

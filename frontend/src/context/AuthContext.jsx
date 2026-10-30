@@ -113,27 +113,24 @@ export const AuthProvider = ({ children }) => {
   // ── sign in ─────────────────────────────────────────────────────────────────
   const signin = async (email, password) => {
     try {
-      // fetch profile first to determine role before setting persistence
-      // we do a temporary sign-in with local persistence, then check role
       await setPersistence(auth, browserLocalPersistence);
       const result = await signInWithEmailAndPassword(auth, email, password);
 
-      // fetch their Firestore profile to check role
+      // fetch Firestore profile to determine role
       const snap = await getDoc(doc(db, 'users', result.user.uid));
       const profile = snap.exists() ? snap.data() : null;
 
       if (profile?.role === 'admin') {
-        // admins → session-only persistence (cleared when browser closes)
-        // we must sign out and sign back in with the new persistence setting
+        // admins get session-only persistence
         await signOut(auth);
         await setPersistence(auth, browserSessionPersistence);
         const adminResult = await signInWithEmailAndPassword(auth, email, password);
         toast.success('Welcome back, Admin!');
-        return adminResult;
+        return { user: adminResult.user, profile };
       }
 
       toast.success('Welcome back!');
-      return result;
+      return { user: result.user, profile };
     } catch (error) {
       toast.error('Invalid email or password');
       throw error;
