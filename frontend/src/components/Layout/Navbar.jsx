@@ -51,14 +51,6 @@ const Navbar = () => {
             
             {currentUser ? (
               <div className="flex items-center space-x-4">
-                {userProfile?.role === 'admin' && (
-                  <Link
-                    to="/admin"
-                    className="bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-primary-700 transition-colors"
-                  >
-                    Admin Panel
-                  </Link>
-                )}
                 <div className="relative group">
                   <button className="flex items-center space-x-2 text-gray-700 hover:text-primary-600">
                     <User className="h-5 w-5" />
@@ -71,6 +63,14 @@ const Navbar = () => {
                     >
                       Profile
                     </Link>
+                    {userProfile?.role === 'admin' && (
+                      <Link
+                        to="/admin"
+                        className="block px-4 py-2 text-sm text-primary-600 font-medium hover:bg-primary-50"
+                      >
+                        Admin Dashboard
+                      </Link>
+                    )}
                     <button
                       onClick={handleLogout}
                       className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -135,15 +135,6 @@ const Navbar = () => {
                       {userProfile?.role} • {userProfile?.status}
                     </p>
                   </div>
-                  {userProfile?.role === 'admin' && (
-                    <Link
-                      to="/admin"
-                      className="block px-3 py-2 text-base font-medium text-primary-600 hover:text-primary-700"
-                      onClick={() => setIsOpen(false)}
-                    >
-                      Admin Panel
-                    </Link>
-                  )}
                   <Link
                     to="/profile"
                     className="block px-3 py-2 text-base font-medium text-gray-700 hover:text-primary-600"
@@ -151,6 +142,15 @@ const Navbar = () => {
                   >
                     Profile
                   </Link>
+                  {userProfile?.role === 'admin' && (
+                    <Link
+                      to="/admin"
+                      className="block px-3 py-2 text-base font-medium text-primary-600 hover:text-primary-700"
+                      onClick={() => setIsOpen(false)}
+                    >
+                      Admin Dashboard
+                    </Link>
+                  )}
                   <button
                     onClick={() => {
                       handleLogout();
