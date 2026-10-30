@@ -1,13 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Award, Plus, Edit2, X, Save, AlertTriangle,
-  History, ChevronDown, ChevronUp, Eye, EyeOff, Image
+  History, ChevronDown, ChevronUp, Eye, EyeOff,
+  Image, Upload, Link as LinkIcon, Loader
 } from 'lucide-react';
 import {
   collection, getDocs, doc, addDoc, updateDoc,
   query, orderBy, where, serverTimestamp
 } from 'firebase/firestore';
-import { db } from '../../services/firebase';
+import {
+  ref, uploadBytesResumable, getDownloadURL
+} from 'firebase/storage';
+import { db, storage } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -63,6 +67,55 @@ const Leadership = () => {
   const [endModal,     setEndModal]     = useState(null);
   const [selected,     setSelected]     = useState(null);
   const [saving,       setSaving]       = useState(false);
+  // photo upload state
+  const [uploading,    setUploading]    = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileInputRef = useRef(null);
+
+  // ── upload photo to Firebase Storage ─────────────────────────────────────
+  const uploadPhoto = async (file, memberId) => {
+    if (!file) return null;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file (JPG, PNG, WebP)');
+      return null;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be smaller than 5 MB');
+      return null;
+    }
+
+    setUploading(true);
+    setUploadProgress(0);
+
+    try {
+      // Store under profiles/{memberId}/leadership.jpg
+      // This path is readable publicly and writable by admins per storage rules
+      const ext = file.name.split('.').pop() || 'jpg';
+      const storageRef = ref(storage, `profiles/${memberId}/leadership.${ext}`);
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      return await new Promise((resolve, reject) => {
+        uploadTask.on(
+          'state_changed',
+          (snap) => {
+            const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+            setUploadProgress(pct);
+          },
+          (err) => {
+            console.error('Upload error:', err);
+            reject(err);
+          },
+          async () => {
+            const url = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve(url);
+          }
+        );
+      });
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  };
 
   // ── form defaults ─────────────────────────────────────────────────────────
   const emptyForm = {
@@ -165,6 +218,13 @@ const Leadership = () => {
     }
     setSaving(true);
     try {
+      // Upload photo file if one was selected
+      let finalPhotoUrl = form.photoUrl.trim() || null;
+      if (form._photoFile) {
+        const uploaded = await uploadPhoto(form._photoFile, form.memberId);
+        if (uploaded) finalPhotoUrl = uploaded;
+      }
+
       await addDoc(collection(db, 'leadership'), {
         memberId:     form.memberId,
         position:     form.position,
@@ -172,7 +232,7 @@ const Leadership = () => {
         endDate:      form.endDate ? toDate(form.endDate) : null,
         status:       'active',
         notes:        form.notes.trim(),
-        photoUrl:     form.photoUrl.trim() || null,
+        photoUrl:     finalPhotoUrl,
         showPublicly: form.showPublicly,
         createdBy:    currentUser.uid,
         createdAt:    serverTimestamp(),
@@ -202,7 +262,10 @@ const Leadership = () => {
       endDate:      toStr(appt.endDate),
       notes:        appt.notes        || '',
       photoUrl:     appt.photoUrl     || '',
-      showPublicly: appt.showPublicly !== false, // default true if not set
+      showPublicly: appt.showPublicly !== false,
+      _photoTab:    appt.photoUrl ? 'url' : 'upload',
+      _photoFile:   null,
+      _photoPreview: null,
     });
     setEditModal(true);
   };
@@ -222,13 +285,20 @@ const Leadership = () => {
     }
     setSaving(true);
     try {
+      // Upload photo file if one was selected
+      let finalPhotoUrl = form.photoUrl.trim() || null;
+      if (form._photoFile) {
+        const uploaded = await uploadPhoto(form._photoFile, form.memberId);
+        if (uploaded) finalPhotoUrl = uploaded;
+      }
+
       await updateDoc(doc(db, 'leadership', selected.id), {
         memberId:     form.memberId,
         position:     form.position,
         startDate:    toDate(form.startDate),
         endDate:      form.endDate ? toDate(form.endDate) : null,
         notes:        form.notes.trim(),
-        photoUrl:     form.photoUrl.trim() || null,
+        photoUrl:     finalPhotoUrl,
         showPublicly: form.showPublicly,
         updatedAt:    serverTimestamp(),
         updatedBy:    currentUser.uid,
@@ -280,10 +350,6 @@ const Leadership = () => {
 
   // ── shared form ───────────────────────────────────────────────────────────
   const AppointmentForm = ({ onSubmit, isEdit = false }) => {
-    const memberObj = members.find(m => m.id === form.memberId);
-    // Show current photo resolution preview
-    const previewPhoto = form.photoUrl || (memberObj ? `/images/team/${memberObj.id}.jpg` : null);
-
     return (
       <form onSubmit={onSubmit} className="space-y-4">
         {/* Member selector */}
@@ -337,44 +403,129 @@ const Leadership = () => {
           </div>
         </div>
 
-        {/* Photo URL */}
+        {/* Photo */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             <span className="flex items-center gap-1.5">
               <Image className="h-4 w-4" />
-              Photo URL <span className="text-gray-400 font-normal">(optional)</span>
+              Photo <span className="text-gray-400 font-normal">(optional)</span>
             </span>
           </label>
-          <input type="url" value={form.photoUrl}
-            onChange={e => setForm({ ...form, photoUrl: e.target.value })}
-            className="input-field"
-            placeholder="https://… or Firebase Storage URL" />
-          <div className="mt-2 text-xs text-gray-500 bg-gray-50 rounded p-2 space-y-1">
-            <p><strong>Photo resolution order (highest priority first):</strong></p>
-            <p>1. URL entered here (also accepts Firebase Storage URLs)</p>
-            <p>2. Local file: <code>/images/team/{'{'}memberId{'}'}.jpg</code></p>
-            <p>3. Initials avatar (automatic fallback)</p>
-            <p className="text-gray-400">When Firebase Storage is enabled, upload a photo and paste the Storage URL here.</p>
+
+          {/* Tab: Upload vs URL */}
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-3">
+            <button type="button"
+              onClick={() => setForm(f => ({ ...f, _photoTab: 'upload' }))}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium transition-colors ${
+                (form._photoTab || 'upload') === 'upload'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}>
+              <Upload className="h-4 w-4" /> Upload File
+            </button>
+            <button type="button"
+              onClick={() => setForm(f => ({ ...f, _photoTab: 'url' }))}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium transition-colors ${
+                form._photoTab === 'url'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}>
+              <LinkIcon className="h-4 w-4" /> Paste URL
+            </button>
           </div>
-          {/* Live photo preview */}
-          {previewPhoto && (
-            <div className="mt-3 flex items-center gap-3">
-              <img src={previewPhoto} alt="Photo preview"
-                className="w-16 h-16 rounded-full object-cover border-2 border-primary-100"
-                onError={e => {
-                  e.target.style.display = 'none';
-                  e.target.nextSibling.style.display = 'flex';
-                }} />
-              <div className="w-16 h-16 rounded-full bg-primary-100 items-center justify-center hidden">
-                <span className="text-xl font-bold text-primary-600">
-                  {memberObj?.fullName?.charAt(0) || '?'}
-                </span>
-              </div>
-              <p className="text-xs text-gray-500">
-                {form.photoUrl ? 'Using URL above' : 'Using local file fallback'}
+
+          {/* Upload file */}
+          {(form._photoTab || 'upload') === 'upload' && (
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  // Create a local preview URL and store file for upload
+                  const previewUrl = URL.createObjectURL(file);
+                  setForm(f => ({ ...f, _photoFile: file, _photoPreview: previewUrl, photoUrl: '' }));
+                }}
+              />
+              <button type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 hover:border-primary-400 rounded-lg py-4 text-sm text-gray-600 hover:text-primary-600 transition-colors">
+                <Upload className="h-5 w-5" />
+                {form._photoFile ? form._photoFile.name : 'Click to choose a photo from your computer'}
+              </button>
+              {form._photoFile && (
+                <p className="text-xs text-gray-400 mt-1">
+                  {(form._photoFile.size / 1024).toFixed(0)} KB · Photo will upload when you save
+                </p>
+              )}
+              {uploading && (
+                <div className="mt-2">
+                  <div className="flex items-center gap-2 text-xs text-primary-600 mb-1">
+                    <Loader className="h-3 w-3 animate-spin" />
+                    Uploading… {uploadProgress}%
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div className="bg-primary-600 h-1.5 rounded-full transition-all"
+                      style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Paste URL */}
+          {form._photoTab === 'url' && (
+            <div>
+              <input type="url" value={form.photoUrl}
+                onChange={e => setForm(f => ({ ...f, photoUrl: e.target.value, _photoFile: null, _photoPreview: null }))}
+                className="input-field"
+                placeholder="https://… or Firebase Storage URL" />
+              <p className="text-xs text-gray-400 mt-1">
+                Paste any public image URL. Firebase Storage URLs also work here.
               </p>
             </div>
           )}
+
+          {/* Photo preview */}
+          {(form._photoPreview || form.photoUrl || (members.find(m => m.id === form.memberId))) && (
+            <div className="mt-3 flex items-center gap-3">
+              <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-primary-100 bg-primary-50 flex-shrink-0 flex items-center justify-center">
+                <img
+                  src={form._photoPreview || form.photoUrl || `/images/team/${form.memberId}.jpg`}
+                  alt="Preview"
+                  className="w-full h-full object-cover"
+                  onError={e => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+                <div className="w-full h-full items-center justify-center hidden">
+                  <span className="text-xl font-bold text-primary-600">
+                    {members.find(m => m.id === form.memberId)?.fullName?.charAt(0) || '?'}
+                  </span>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500">
+                <p className="font-medium text-gray-700">Photo preview</p>
+                <p>{form._photoFile ? 'From selected file' : form.photoUrl ? 'From URL' : 'From local /images/team/ file'}</p>
+                {(form._photoFile || form.photoUrl) && (
+                  <button type="button"
+                    onClick={() => setForm(f => ({ ...f, photoUrl: '', _photoFile: null, _photoPreview: null }))}
+                    className="text-red-500 hover:text-red-600 mt-1">
+                    Remove photo
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Resolution order note */}
+          <p className="text-xs text-gray-400 mt-2 bg-gray-50 rounded p-2">
+            <strong>Priority:</strong> Uploaded/URL photo → <code>/images/team/{'{'}memberId{'}'}.jpg</code> → Initials
+          </p>
         </div>
 
         {/* Public visibility toggle */}
