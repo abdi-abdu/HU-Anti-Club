@@ -3,6 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ── Helper functions ────────────────────────────────────────────────────
+
     function isSignedIn() {
       return request.auth != null;
     }
@@ -24,29 +25,97 @@ service cloud.firestore {
     }
 
     // ── users ───────────────────────────────────────────────────────────────
+    //
+    // Security model:
+    //   - Registration creates student accounts with status=pending only.
+    //   - Owners can update a fixed set of personal fields; role and status excluded.
+    //   - Admins may change status via exactly five approved source→destination pairs.
+    //   - Admins may demote admin→student; source must currently be admin.
+    //   - Admins may promote student→admin+active; source must currently be student.
+    //   - Self-demotion and self-status-change are blocked at rule level.
+    //   - The designated protected administrator's role, status, and document
+    //     are immutable through any client SDK write. Use Firebase Console to
+    //     modify the protected admin account if necessary.
+    //
     match /users/{userId} {
-      // Anyone can read their own profile; admins can read all profiles.
+
+      // Read: own profile or any admin
       allow read: if isOwner(userId) || isAdmin();
 
-      // New registration: user creates their own document.
-      // Enforces role=student and status=pending — cannot self-promote.
+      // Create: new registration only
+      // Enforces role=student and status=pending — user cannot self-promote
       allow create: if isOwner(userId)
-        && request.resource.data.role == 'student'
+        && request.resource.data.role   == 'student'
         && request.resource.data.status == 'pending';
 
-      // Profile self-update: owner can only change safe personal fields.
-      // Role and status are NOT in this list — only admins can change those.
+      // Update: owner changes their own personal profile fields only
+      // Explicit allowlist — role, status, email, universityId, createdAt excluded
       allow update: if isOwner(userId)
         && request.resource.data.diff(resource.data)
              .affectedKeys()
              .hasOnly(['fullName', 'phone', 'department', 'yearOfStudy',
                        'college', 'privacy', 'updatedAt']);
 
-      // Admins can update anything on any user document (approvals, role changes).
-      allow update: if isAdmin();
+      // Update: admin changes status only
+      // Exactly five approved source→destination pairs.
+      // All other transitions — including same-status no-ops, pending destination,
+      // and cross-assignments — are implicitly blocked by not appearing in any pair.
+      // Self-status-change blocked (mirrors UI !isSelf guard at rule level).
+      // Protected admin status cannot be changed by any client write.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['status', 'updatedAt'])
+        && userId != request.auth.uid
+        && userId != '3HL1cghtVvScyiHSLPDGdkIdaMF3'
+        && (
+             (resource.data.status == 'pending'     && request.resource.data.status == 'active'     )  // approve
+          || (resource.data.status == 'pending'     && request.resource.data.status == 'rejected'   )  // reject
+          || (resource.data.status == 'active'      && request.resource.data.status == 'deactivated')  // deactivate
+          || (resource.data.status == 'deactivated' && request.resource.data.status == 'active'     )  // reactivate
+          || (resource.data.status == 'rejected'    && request.resource.data.status == 'active'     )  // reactivate
+           );
 
-      // Only admins can delete user documents (rare, but allowed for cleanup).
-      allow delete: if isAdmin();
+      // Update: admin removes admin role
+      // Source must currently be admin. Destination must be student.
+      // Self-demotion blocked. Protected admin cannot be demoted.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['role', 'updatedAt'])
+        && resource.data.role         == 'admin'
+        && request.resource.data.role == 'student'
+        && userId != request.auth.uid
+        && userId != '3HL1cghtVvScyiHSLPDGdkIdaMF3';
+
+      // Update: admin promotes a member to admin
+      // Source must currently be student. Destination must be exactly role=admin
+      // and status=active together — no other role+status combination permitted.
+      // Self-promotion blocked. Protected admin excluded.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['role', 'status', 'updatedAt'])
+        && resource.data.role           == 'student'
+        && request.resource.data.role   == 'admin'
+        && request.resource.data.status == 'active'
+        && userId != request.auth.uid
+        && userId != '3HL1cghtVvScyiHSLPDGdkIdaMF3';
+
+      // Update: admin edits a member's profile fields
+      // Explicit allowlist matching exactly what Members.jsx saveEdit sends.
+      // role, status, email, universityId, createdAt, privacy excluded.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['fullName', 'phone', 'department', 'yearOfStudy',
+                       'college', 'updatedAt']);
+
+      // Delete: admin only
+      // Protected admin document cannot be deleted by any client write.
+      // To modify the protected admin account use Firebase Console directly.
+      allow delete: if isAdmin()
+        && userId != '3HL1cghtVvScyiHSLPDGdkIdaMF3';
     }
 
     // ── announcements ────────────────────────────────────────────────────────
