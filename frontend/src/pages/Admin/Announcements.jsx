@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
+import { logAction, LOG } from '../../services/activityLog';
 import toast from 'react-hot-toast';
 
 // ── Announcement types ────────────────────────────────────────────────────────
@@ -119,20 +120,25 @@ const Announcements = () => {
       };
 
       if (editing) {
-        // Track publish time if being published for the first time
         if (form.published && !editing.published) {
           payload.publishedAt = serverTimestamp();
         }
         await updateDoc(doc(db, 'announcements', editing.id), payload);
         toast.success('Announcement updated ✓');
+        const logKey = form.published && !editing.published ? LOG.ANN_PUBLISHED : LOG.ANN_UPDATED;
+        await logAction(currentUser, logKey, 'announcement', editing.id,
+          `${form.published && !editing.published ? 'Published' : 'Updated'} announcement: "${form.title}"`);
       } else {
-        await addDoc(collection(db, 'announcements'), {
+        const docRef = await addDoc(collection(db, 'announcements'), {
           ...payload,
           createdBy:   currentUser.uid,
           createdAt:   serverTimestamp(),
           publishedAt: form.published ? serverTimestamp() : null,
         });
+        const logKey = form.published ? LOG.ANN_PUBLISHED : LOG.ANN_CREATED;
         toast.success(form.published ? 'Announcement published ✓' : 'Draft saved ✓');
+        await logAction(currentUser, logKey, 'announcement', docRef.id,
+          `${form.published ? 'Published' : 'Created draft'} announcement: "${form.title}"`);
       }
       setModal(false);
       fetchItems();
@@ -151,7 +157,10 @@ const Announcements = () => {
         publishedAt: newPublished ? serverTimestamp() : item.publishedAt || null,
         updatedAt:   serverTimestamp(),
       });
+      const logKey = newPublished ? LOG.ANN_PUBLISHED : LOG.ANN_UNPUBLISHED;
       toast.success(newPublished ? 'Announcement published ✓' : 'Announcement unpublished');
+      await logAction(currentUser, logKey, 'announcement', item.id,
+        `${newPublished ? 'Published' : 'Unpublished'} announcement: "${item.title}"`);
       fetchItems();
     } catch { toast.error('Failed to update'); }
   };
@@ -162,6 +171,8 @@ const Announcements = () => {
     try {
       await deleteDoc(doc(db, 'announcements', confirmDel.id));
       toast.success('Announcement deleted');
+      await logAction(currentUser, LOG.ANN_DELETED, 'announcement', confirmDel.id,
+        `Deleted announcement: "${confirmDel.title}"`);
       setConfirmDel(null);
       fetchItems();
     } catch { toast.error('Failed to delete'); }

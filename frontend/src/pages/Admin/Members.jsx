@@ -11,6 +11,7 @@ import {
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { POSITIONS } from './Leadership';
+import { logAction, LOG } from '../../services/activityLog';
 import toast from 'react-hot-toast';
 
 // ── Modal wrapper ─────────────────────────────────────────────────────────────
@@ -193,13 +194,24 @@ const Members = () => {
   const handleConfirmedAction = async () => {
     if (!confirmModal) return;
     const { action, userId } = confirmModal;
+    const targetName = confirmModal.memberName;
     setConfirmModal(null);
-    if (action === 'approve')     await doUpdate(userId, { status: 'active' },      'Member approved ✓');
-    if (action === 'reject')      await doUpdate(userId, { status: 'rejected' },    'Member rejected');
-    if (action === 'deactivate')  await doUpdate(userId, { status: 'deactivated' }, 'Member deactivated');
-    if (action === 'reactivate')  await doUpdate(userId, { status: 'active' },      'Member reactivated ✓');
-    if (action === 'makeAdmin')   await doUpdate(userId, { role: 'admin', status: 'active' }, 'Promoted to admin ✓');
-    if (action === 'removeAdmin') await doUpdate(userId, { role: 'student' },       'Admin access removed');
+
+    const actionMap = {
+      approve:     [{ status: 'active' },      'Member approved ✓',          LOG.MEMBER_APPROVED,    `Approved member: ${targetName}`],
+      reject:      [{ status: 'rejected' },    'Member rejected',            LOG.MEMBER_REJECTED,    `Rejected member: ${targetName}`],
+      deactivate:  [{ status: 'deactivated' }, 'Member deactivated',         LOG.MEMBER_DEACTIVATED, `Deactivated member: ${targetName}`],
+      reactivate:  [{ status: 'active' },      'Member reactivated ✓',       LOG.MEMBER_REACTIVATED, `Reactivated member: ${targetName}`],
+      makeAdmin:   [{ role: 'admin', status: 'active' }, 'Promoted to admin ✓', LOG.MEMBER_MAKE_ADMIN,  `Granted admin access to: ${targetName}`],
+      removeAdmin: [{ role: 'student' },       'Admin access removed',       LOG.MEMBER_REMOVE_ADMIN,`Removed admin access from: ${targetName}`],
+    };
+
+    const entry = actionMap[action];
+    if (!entry) return;
+    const [data, msg, logKey, logLabel] = entry;
+
+    await doUpdate(userId, data, msg);
+    await logAction(currentUser, logKey, 'user', userId, logLabel);
   };
 
   const confirm = (action, member, label) =>
@@ -234,6 +246,8 @@ const Members = () => {
         updatedAt:   serverTimestamp(),
       });
       toast.success('Member information updated ✓');
+      await logAction(currentUser, LOG.MEMBER_EDITED, 'user', selectedMember.id,
+        `Edited profile of: ${selectedMember.fullName}`);
       setEditModal(false);
       fetchData();
     } catch (err) {

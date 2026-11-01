@@ -15,6 +15,8 @@ import Members from './Members';
 import Leadership from './Leadership';
 import AdminEvents from './Events';
 import Announcements from './Announcements';
+import ActivityLog from './ActivityLog';
+import { logAction, LOG } from '../../services/activityLog';
 import toast from 'react-hot-toast';
 
 // ─── tiny modal wrapper ───────────────────────────────────────────────────────
@@ -208,8 +210,10 @@ const AdminDashboard = () => {
           category: postForm.category,
         });
         toast.success('Article updated!');
+        await logAction(currentUser, LOG.POST_UPDATED, 'post', editingPost.id,
+          `Updated article: "${postForm.title}"`);
       } else {
-        await addDoc(collection(db, 'posts'), {
+        const docRef = await addDoc(collection(db, 'posts'), {
           title:    postForm.title,
           content:  postForm.content,
           category: postForm.category,
@@ -217,6 +221,8 @@ const AdminDashboard = () => {
           createdAt: serverTimestamp(),
         });
         toast.success('Article published!');
+        await logAction(currentUser, LOG.POST_CREATED, 'post', docRef.id,
+          `Published article: "${postForm.title}"`);
       }
       setPostModal(false);
       fetchAll();
@@ -228,9 +234,12 @@ const AdminDashboard = () => {
 
   const deletePost = async (id) => {
     if (!window.confirm('Delete this article?')) return;
+    const post = posts.find(p => p.id === id);
     try {
       await deleteDoc(doc(db, 'posts', id));
       toast.success('Article deleted');
+      await logAction(currentUser, LOG.POST_DELETED, 'post', id,
+        `Deleted article: "${post?.title || id}"`);
       fetchAll();
     } catch { toast.error('Failed to delete article'); }
   };
@@ -379,6 +388,9 @@ const AdminDashboard = () => {
 
         {/* ── ANNOUNCEMENTS TAB ── */}
         {activeTab === 'announcements' && <Announcements />}
+
+        {/* ── ACTIVITY LOG TAB ── */}
+        {activeTab === 'activity' && <ActivityLog />}
 
         {/* ── MESSAGES TAB ── */}
         {activeTab === 'messages' && (

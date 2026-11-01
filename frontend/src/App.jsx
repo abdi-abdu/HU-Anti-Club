@@ -67,6 +67,7 @@ function AppRoutes() {
           <Route path="/admin/posts"            element={<AdminRoute><AdminDashboard /></AdminRoute>} />
           <Route path="/admin/announcements"    element={<AdminRoute><AdminDashboard /></AdminRoute>} />
           <Route path="/admin/messages"         element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/activity"         element={<AdminRoute><AdminDashboard /></AdminRoute>} />
           <Route path="/admin/:tab"             element={<AdminRoute><AdminDashboard /></AdminRoute>} />
 
           {/* Fallback */}

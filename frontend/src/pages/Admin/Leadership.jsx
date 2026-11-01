@@ -13,6 +13,7 @@ import {
 } from 'firebase/storage';
 import { db, storage } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
+import { logAction, LOG } from '../../services/activityLog';
 import toast from 'react-hot-toast';
 
 // ── Available positions — add more here to extend later ───────────────────────
@@ -226,7 +227,7 @@ const Leadership = () => {
         if (uploaded) finalPhotoUrl = uploaded;
       }
 
-      await addDoc(collection(db, 'leadership'), {
+      const docRef = await addDoc(collection(db, 'leadership'), {
         memberId:     form.memberId,
         position:     form.position,
         startDate:    toDate(form.startDate),
@@ -240,6 +241,8 @@ const Leadership = () => {
         updatedAt:    serverTimestamp(),
       });
       toast.success(`${positionLabel(form.position)} assigned ✓`);
+      await logAction(currentUser, LOG.LEADERSHIP_ASSIGNED, 'leadership', docRef.id,
+        `Assigned ${positionLabel(form.position)} to ${memberName(form.memberId)}`);
       setAssignModal(false);
       fetchData();
     } catch (err) {
@@ -305,6 +308,8 @@ const Leadership = () => {
         updatedBy:    currentUser.uid,
       });
       toast.success('Appointment updated ✓');
+      await logAction(currentUser, LOG.LEADERSHIP_UPDATED, 'leadership', selected.id,
+        `Updated ${positionLabel(form.position)} appointment for ${memberName(form.memberId)}`);
       setEditModal(false);
       fetchData();
     } catch (err) {
@@ -324,6 +329,8 @@ const Leadership = () => {
         updatedBy: currentUser.uid,
       });
       toast.success('Appointment ended. Historical record preserved ✓');
+      await logAction(currentUser, LOG.LEADERSHIP_ENDED, 'leadership', endModal.id,
+        `Ended ${positionLabel(endModal.position)} term for ${memberName(endModal.memberId)}`);
       setEndModal(null);
       fetchData();
     } catch (err) {
@@ -345,6 +352,8 @@ const Leadership = () => {
           ? 'Hidden from public About page'
           : 'Now visible on public About page ✓'
       );
+      await logAction(currentUser, LOG.LEADERSHIP_VISIBILITY, 'leadership', appt.id,
+        `${appt.showPublicly !== false ? 'Hidden' : 'Shown'} ${positionLabel(appt.position)} (${memberName(appt.memberId)}) on About page`);
       fetchData();
     } catch { toast.error('Failed to update visibility'); }
   };

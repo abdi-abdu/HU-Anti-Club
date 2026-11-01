@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, User, LogOut, LayoutDashboard, Calendar, FileText, MessageCircle, BookOpen, Users, Award, Bell } from 'lucide-react';
+import { Menu, X, User, LogOut, LayoutDashboard, Calendar, FileText, MessageCircle, BookOpen, Users, Award, Bell, Activity } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const Navbar = () => {
@@ -36,6 +36,7 @@ const Navbar = () => {
     { to: '/admin/posts',            label: 'Blog Posts',     icon: FileText        },
     { to: '/admin/announcements',    label: 'Announcements',  icon: Bell            },
     { to: '/admin/messages',         label: 'Help Messages',  icon: MessageCircle   },
+    { to: '/admin/activity',         label: 'Activity Log',   icon: Activity        },
   ];
 
   // ── student dashboard nav ────────────────────────────────────────────────

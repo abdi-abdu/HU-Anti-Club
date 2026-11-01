@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
+import { logAction, LOG } from '../../services/activityLog';
 import toast from 'react-hot-toast';
 
 // ── Event types ───────────────────────────────────────────────────────────────
@@ -158,13 +159,18 @@ const AdminEvents = () => {
       if (editingEvent) {
         await updateDoc(doc(db, 'events', editingEvent.id), payload);
         toast.success('Event updated ✓');
+        await logAction(currentUser, LOG.EVENT_UPDATED, 'event', editingEvent.id,
+          `Updated event: "${form.title}"`);
       } else {
-        await addDoc(collection(db, 'events'), {
+        const docRef = await addDoc(collection(db, 'events'), {
           ...payload,
           createdBy: currentUser.uid,
           createdAt: serverTimestamp(),
         });
+        const logKey = form.status === 'published' ? LOG.EVENT_PUBLISHED : LOG.EVENT_CREATED;
         toast.success(form.status === 'published' ? 'Event published ✓' : 'Event saved as draft ✓');
+        await logAction(currentUser, logKey, 'event', docRef.id,
+          `${form.status === 'published' ? 'Published' : 'Created draft'} event: "${form.title}"`);
       }
       setEventModal(false);
       fetchEvents();
@@ -179,7 +185,10 @@ const AdminEvents = () => {
     const newStatus = (ev.status || 'draft') === 'published' ? 'draft' : 'published';
     try {
       await updateDoc(doc(db, 'events', ev.id), { status: newStatus, updatedAt: serverTimestamp() });
+      const logKey = newStatus === 'published' ? LOG.EVENT_PUBLISHED : LOG.EVENT_UNPUBLISHED;
       toast.success(newStatus === 'published' ? 'Event published ✓' : 'Event unpublished');
+      await logAction(currentUser, logKey, 'event', ev.id,
+        `${newStatus === 'published' ? 'Published' : 'Unpublished'} event: "${ev.title}"`);
       fetchEvents();
     } catch { toast.error('Failed to update status'); }
   };
@@ -190,6 +199,8 @@ const AdminEvents = () => {
     try {
       await deleteDoc(doc(db, 'events', confirmModal.id));
       toast.success('Event deleted');
+      await logAction(currentUser, LOG.EVENT_DELETED, 'event', confirmModal.id,
+        `Deleted event: "${confirmModal.title}"`);
       setConfirmModal(null);
       fetchEvents();
     } catch { toast.error('Failed to delete event'); }

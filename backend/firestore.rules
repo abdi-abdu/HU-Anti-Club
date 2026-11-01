@@ -24,21 +24,32 @@ service cloud.firestore {
     }
 
     // ── users ───────────────────────────────────────────────────────────────
-    // Own user: full read/write.
-    // Admin: read and write any user document (for approvals / role changes).
-    // New registration: authenticated user can CREATE their own document,
-    //   but cannot self-assign role=admin or status=active.
     match /users/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      // Anyone can read their own profile; admins can read all profiles.
+      allow read: if isOwner(userId) || isAdmin();
 
+      // New registration: user creates their own document.
+      // Enforces role=student and status=pending — cannot self-promote.
       allow create: if isOwner(userId)
         && request.resource.data.role == 'student'
         && request.resource.data.status == 'pending';
+
+      // Profile self-update: owner can only change safe personal fields.
+      // Role and status are NOT in this list — only admins can change those.
+      allow update: if isOwner(userId)
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['fullName', 'phone', 'department', 'yearOfStudy',
+                       'college', 'privacy', 'updatedAt']);
+
+      // Admins can update anything on any user document (approvals, role changes).
+      allow update: if isAdmin();
+
+      // Only admins can delete user documents (rare, but allowed for cleanup).
+      allow delete: if isAdmin();
     }
 
     // ── announcements ────────────────────────────────────────────────────────
-    // Public read for published announcements.
-    // Only admins can create, update, delete.
     match /announcements/{announcementId} {
       allow read: if true;
       allow create: if isAdmin()
@@ -49,8 +60,7 @@ service cloud.firestore {
     }
 
     // ── leadership ───────────────────────────────────────────────────────────
-    // Public read (About page shows current leaders publicly).
-    // Only admins can create, update appointments.
+    // Public read. Only admins can create or update.
     // No delete — historical records must be preserved.
     match /leadership/{appointmentId} {
       allow read: if true;
@@ -62,7 +72,6 @@ service cloud.firestore {
     }
 
     // ── events ──────────────────────────────────────────────────────────────
-    // Public read. Admin create/update/delete with required-field validation.
     match /events/{eventId} {
       allow read: if true;
 
@@ -74,9 +83,9 @@ service cloud.firestore {
 
       allow update, delete: if isAdmin();
 
-      // registrations subcollection
-      // active members can register/unregister themselves
-      // admins can read all registrations
+      // Registrations subcollection.
+      // Active members register/unregister themselves only.
+      // Admins read all registrations.
       match /registrations/{userId} {
         allow read: if isAdmin();
         allow create: if isActiveUser() && request.auth.uid == userId;
@@ -85,7 +94,6 @@ service cloud.firestore {
     }
 
     // ── posts ───────────────────────────────────────────────────────────────
-    // Public read. Admin create/update/delete with required-field validation.
     match /posts/{postId} {
       allow read: if true;
 
@@ -99,7 +107,6 @@ service cloud.firestore {
     }
 
     // ── resources ───────────────────────────────────────────────────────────
-    // Active members can read. Admin create/update/delete.
     match /resources/{resourceId} {
       allow read: if isActiveUser() || isAdmin();
 
@@ -113,21 +120,34 @@ service cloud.firestore {
     }
 
     // ── anonymousMessages ────────────────────────────────────────────────────
-    // Anyone (even unauthenticated) can create a message.
-    // Only admins can read messages or mark them as replied.
-    // No delete allowed (preserves audit trail).
     match /anonymousMessages/{messageId} {
       allow read: if isAdmin();
 
-      // Single combined create rule — open to all, with field validation
+      // Anyone (including unauthenticated) can submit an anonymous message.
       allow create: if request.resource.data.keys().hasAll([
                          'subject', 'message', 'createdAt', 'isReplied'
                        ])
                     && request.resource.data.isReplied == false;
 
-      // Admin can only flip the isReplied flag — no other field changes
+      // Admins can only flip the isReplied flag — no other field changes.
       allow update: if isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isReplied']);
+        && request.resource.data.diff(resource.data)
+             .affectedKeys().hasOnly(['isReplied']);
+    }
+
+    // ── activityLogs ─────────────────────────────────────────────────────────
+    // Append-only from authenticated users (each user logs their own actions).
+    // Only admins can read logs.
+    // Nobody can update or delete logs — immutable audit trail.
+    match /activityLogs/{logId} {
+      allow read:   if isAdmin();
+      allow create: if isSignedIn()
+        && request.resource.data.actorId == request.auth.uid
+        && request.resource.data.keys().hasAll([
+             'actorId', 'action', 'recordType', 'recordId', 'timestamp'
+           ]);
+      allow update: if false;
+      allow delete: if false;
     }
   }
 }
