@@ -281,7 +281,7 @@ const Members = () => {
             <p className="font-medium text-amber-900">Two separate concepts</p>
             <p className="text-amber-700 mt-0.5">
               <strong>Website Role</strong> (Admin / Student) controls dashboard access. &nbsp;|&nbsp;
-              <strong>Club Position</strong> (President / VP / Secretary) is the official club appointment —
+              <strong>Club Position</strong> (Supervisor / President / VP / Secretary) is the official club appointment —
               managed in the <strong>Leadership</strong> section.
             </p>
           </div>

@@ -17,6 +17,7 @@ import toast from 'react-hot-toast';
 
 // ── Available positions — add more here to extend later ───────────────────────
 export const POSITIONS = [
+  { id: 'supervisor',     label: 'Supervisor'     },
   { id: 'president',      label: 'President'      },
   { id: 'vice_president', label: 'Vice President'  },
   { id: 'secretary',      label: 'Secretary'       },
