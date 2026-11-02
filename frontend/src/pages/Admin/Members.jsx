@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { POSITIONS } from './Leadership';
 import { logAction, LOG } from '../../services/activityLog';
 import toast from 'react-hot-toast';
@@ -84,6 +85,7 @@ const YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year', '5th Year', 'Grad
 // ─────────────────────────────────────────────────────────────────────────────
 const Members = () => {
   const { currentUser } = useAuth();
+  const perms = usePermissions();
 
   const [members,        setMembers]        = useState([]);
   // map: memberId → current active position id
@@ -439,6 +441,7 @@ const Members = () => {
                         onView={openView}
                         onEdit={openEdit}
                         onConfirm={confirm}
+                        perms={perms}
                       />
                     </td>
                   </tr>
@@ -471,6 +474,7 @@ const Members = () => {
                   onView={openView}
                   onEdit={openEdit}
                   onConfirm={confirm}
+                  perms={perms}
                 />
               </div>
             ))}
@@ -639,7 +643,7 @@ const Members = () => {
 };
 
 // ── Action buttons ────────────────────────────────────────────────────────────
-const ActionButtons = ({ member, currentUid, onView, onEdit, onConfirm }) => {
+const ActionButtons = ({ member, currentUid, onView, onEdit, onConfirm, perms }) => {
   const isSelf = member.id === currentUid;
   return (
     <div className="flex flex-wrap gap-1">
@@ -647,31 +651,33 @@ const ActionButtons = ({ member, currentUid, onView, onEdit, onConfirm }) => {
         className="flex items-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs transition-colors">
         <Eye className="h-3 w-3" /> View
       </button>
+      {perms.canEditMembers && (
       <button onClick={() => onEdit(member)}
         className="flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs transition-colors">
         <Edit2 className="h-3 w-3" /> Edit
       </button>
-      {member.status === 'pending' && (
+      )}
+      {perms.canEditMembers && member.status === 'pending' && (
         <button onClick={() => onConfirm('approve', member, 'Approve this member and grant access?')}
           className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs">Approve</button>
       )}
-      {member.status === 'pending' && (
+      {perms.canEditMembers && member.status === 'pending' && (
         <button onClick={() => onConfirm('reject', member, 'Reject this membership application?')}
           className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs">Reject</button>
       )}
-      {member.status === 'active' && !isSelf && (
+      {perms.canDeactivateMembers && member.status === 'active' && !isSelf && (
         <button onClick={() => onConfirm('deactivate', member, 'Deactivate this membership?')}
           className="bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs">Deactivate</button>
       )}
-      {(member.status === 'deactivated' || member.status === 'rejected') && (
+      {perms.canDeactivateMembers && (member.status === 'deactivated' || member.status === 'rejected') && (
         <button onClick={() => onConfirm('reactivate', member, 'Reactivate this membership?')}
           className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs">Reactivate</button>
       )}
-      {member.role !== 'admin' && member.status === 'active' && (
+      {perms.canManageAdminRole && member.role !== 'admin' && member.status === 'active' && (
         <button onClick={() => onConfirm('makeAdmin', member, 'Grant full admin access to this member?')}
           className="bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded text-xs">Make Admin</button>
       )}
-      {member.role === 'admin' && !isSelf && (
+      {perms.canManageAdminRole && member.role === 'admin' && !isSelf && (
         <button onClick={() => onConfirm('removeAdmin', member, 'Remove admin access from this member?')}
           className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 rounded text-xs">Remove Admin</button>
       )}

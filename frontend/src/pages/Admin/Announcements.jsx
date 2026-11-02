@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { logAction, LOG } from '../../services/activityLog';
 import toast from 'react-hot-toast';
 
@@ -45,6 +46,7 @@ const Modal = ({ title, onClose, children, size = 'md' }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 const Announcements = () => {
   const { currentUser } = useAuth();
+  const perms = usePermissions();
 
   const [items,        setItems]        = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -295,10 +297,12 @@ const Announcements = () => {
                         : <><Eye className="h-3 w-3" /> Publish</>
                       }
                     </button>
+                    {perms.canDeleteAnnouncements && (
                     <button onClick={() => setConfirmDel(item)}
                       className="flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1.5 rounded text-xs transition-colors">
                       <Trash2 className="h-3 w-3" /> Delete
                     </button>
+                    )}
                   </div>
                 </div>
               </div>

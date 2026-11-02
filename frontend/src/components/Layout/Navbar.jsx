@@ -1,23 +1,40 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, User, LogOut, LayoutDashboard, Calendar, FileText, MessageCircle, BookOpen, Users, Award, Bell, Activity } from 'lucide-react';
+import {
+  Menu, X, User, LogOut, LayoutDashboard, Calendar,
+  FileText, MessageCircle, BookOpen, Users, Award,
+  Bell, Activity, Shield
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { usePermissions } from '../../hooks/usePermissions';
+
+// Human-readable position labels for the nav badge
+const POSITION_LABELS = {
+  supervisor:      'Supervisor',
+  president:       'President',
+  vice_president:  'VP',
+  secretary:       'Secretary',
+};
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const { currentUser, userProfile, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Resolve club position for officer nav — only runs when user is logged in
+  const { position, isAdmin: isAdminRole, canViewDashboard } = usePermissions();
+
+  const isAdmin   = isAdminRole;
+  // An "officer" for nav purposes is anyone who can view the dashboard but isn't a full admin
+  const isOfficer = !isAdmin && canViewDashboard;
+  const isStudent = currentUser && !isAdmin && !isOfficer;
 
   const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
+    try { await logout(); navigate('/'); } catch (e) { console.error(e); }
   };
 
-  // ── public nav (guests only) ─────────────────────────────────────────────
+  // ── public links ──────────────────────────────────────────────────────────
   const publicLinks = [
     { to: '/',          label: 'Home'      },
     { to: '/about',     label: 'About'     },
@@ -27,32 +44,61 @@ const Navbar = () => {
     { to: '/help',      label: 'Get Help'  },
   ];
 
-  // ── admin dashboard nav ──────────────────────────────────────────────────
-  const adminLinks = [
-    { to: '/admin',                  label: 'Overview',       icon: LayoutDashboard },
-    { to: '/admin/members',          label: 'Members',        icon: Users           },
-    { to: '/admin/leadership',       label: 'Leadership',     icon: Award           },
-    { to: '/admin/events',           label: 'Events',         icon: Calendar        },
-    { to: '/admin/posts',            label: 'Blog Posts',     icon: FileText        },
-    { to: '/admin/announcements',    label: 'Announcements',  icon: Bell            },
-    { to: '/admin/messages',         label: 'Help Messages',  icon: MessageCircle   },
-    { to: '/admin/activity',         label: 'Activity Log',   icon: Activity        },
+  // ── admin dashboard nav — full link set ───────────────────────────────────
+  const allAdminLinks = [
+    { to: '/admin',               label: 'Overview',      icon: LayoutDashboard, alwaysShow: true  },
+    { to: '/admin/members',       label: 'Members',       icon: Users,           alwaysShow: true  },
+    { to: '/admin/leadership',    label: 'Leadership',    icon: Award,           alwaysShow: true  },
+    { to: '/admin/events',        label: 'Events',        icon: Calendar,        alwaysShow: true  },
+    { to: '/admin/posts',         label: 'Blog Posts',    icon: FileText,        alwaysShow: true  },
+    { to: '/admin/announcements', label: 'Announcements', icon: Bell,            alwaysShow: true  },
+    { to: '/admin/messages',      label: 'Help Messages', icon: MessageCircle,   alwaysShow: true  },
+    { to: '/admin/activity',      label: 'Activity Log',  icon: Activity,        alwaysShow: true  },
   ];
 
-  // ── student dashboard nav ────────────────────────────────────────────────
+  // ── officer nav — filtered by spec permissions ────────────────────────────
+  // Supervisor: overview, members(view), leadership, events(view), posts(view),
+  //             announcements(view), activity — NOT messages (only aggregate stats)
+  // President/VP/Secretary: overview, members, events, posts, announcements,
+  //                         messages, activity — leadership is view-only for them
+  const officerLinks = (() => {
+    if (!position) return [];
+    const base = [
+      { to: '/admin',               label: 'Overview',      icon: LayoutDashboard },
+      { to: '/admin/members',       label: 'Members',       icon: Users           },
+      { to: '/admin/leadership',    label: 'Leadership',    icon: Award           },
+      { to: '/admin/events',        label: 'Events',        icon: Calendar        },
+      { to: '/admin/posts',         label: 'Blog Posts',    icon: FileText        },
+      { to: '/admin/announcements', label: 'Announcements', icon: Bell            },
+      { to: '/admin/activity',      label: 'Activity Log',  icon: Activity        },
+    ];
+    // President, VP, Secretary can read individual help messages
+    if (['president', 'vice_president', 'secretary'].includes(position)) {
+      base.splice(6, 0, { to: '/admin/messages', label: 'Help Messages', icon: MessageCircle });
+    }
+    // Supervisor does NOT get help-messages link (only aggregate stats shown inside dashboard)
+    return base;
+  })();
+
+  // ── student links ─────────────────────────────────────────────────────────
   const studentLinks = [
-    { to: '/profile',   label: 'My Profile', icon: User        },
-    { to: '/events',    label: 'Events',     icon: Calendar    },
-    { to: '/blog',      label: 'Blog',       icon: BookOpen    },
-    { to: '/resources', label: 'Resources',  icon: FileText    },
+    { to: '/profile',   label: 'My Profile', icon: User          },
+    { to: '/events',    label: 'Events',     icon: Calendar      },
+    { to: '/blog',      label: 'Blog',       icon: BookOpen      },
+    { to: '/resources', label: 'Resources',  icon: FileText      },
     { to: '/help',      label: 'Get Help',   icon: MessageCircle },
   ];
 
-  const isAdmin   = currentUser && userProfile?.role === 'admin';
-  const isStudent = currentUser && userProfile?.role !== 'admin';
+  // Select link set
+  const dashboardLinks = isAdmin ? allAdminLinks : isOfficer ? officerLinks : studentLinks;
 
-  const dashboardLinks = isAdmin ? adminLinks : studentLinks;
-  const location = useLocation();
+  // Logo destination
+  const logoDest = isAdmin || isOfficer ? '/admin' : isStudent ? '/profile' : '/';
+
+  // Badge text for the user chip
+  const badgeText = isAdmin
+    ? 'Admin'
+    : position ? POSITION_LABELS[position] : null;
 
   return (
     <nav className="bg-white shadow-lg sticky top-0 z-50">
@@ -61,10 +107,7 @@ const Navbar = () => {
 
           {/* Logo */}
           <div className="flex items-center">
-            <Link
-              to={isAdmin ? '/admin' : isStudent ? '/profile' : '/'}
-              className="flex items-center space-x-2"
-            >
+            <Link to={logoDest} className="flex items-center space-x-2">
               <img src="/images/logo.png" alt="HU Anti-Drug Club Logo"
                 className="h-10 w-10 object-contain rounded-full" />
               <span className="font-bold text-xl text-gray-900">HU Anti-Drug Club</span>
@@ -73,7 +116,7 @@ const Navbar = () => {
 
           {/* Desktop nav */}
           <div className="hidden md:flex items-center space-x-1">
-            {/* Guest: show public links */}
+            {/* Guest */}
             {!currentUser && publicLinks.map(link => (
               <Link key={link.to} to={link.to}
                 className="text-gray-700 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium transition-colors">
@@ -81,9 +124,9 @@ const Navbar = () => {
               </Link>
             ))}
 
-            {/* Logged in: show role-specific dashboard links */}
+            {/* Logged-in */}
             {currentUser && dashboardLinks.map(link => (
-              <Link key={link.label} to={link.to}
+              <Link key={link.to} to={link.to}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                   location.pathname === link.to
                     ? 'bg-primary-50 text-primary-600'
@@ -94,7 +137,7 @@ const Navbar = () => {
               </Link>
             ))}
 
-            {/* Auth buttons / user menu */}
+            {/* User chip */}
             {currentUser ? (
               <div className="relative group ml-4">
                 <button className="flex items-center space-x-2 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg text-gray-700 transition-colors">
@@ -102,8 +145,14 @@ const Navbar = () => {
                   <span className="text-sm font-medium">
                     {userProfile?.fullName?.split(' ')[0] || currentUser.email}
                   </span>
-                  {isAdmin && (
-                    <span className="bg-purple-100 text-purple-700 text-xs px-1.5 py-0.5 rounded-full">Admin</span>
+                  {badgeText && (
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                      isAdmin
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {badgeText}
+                    </span>
                   )}
                 </button>
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 border border-gray-100">
@@ -137,7 +186,7 @@ const Navbar = () => {
             )}
           </div>
 
-          {/* Mobile menu button */}
+          {/* Mobile button */}
           <div className="md:hidden flex items-center">
             <button onClick={() => setIsOpen(!isOpen)}
               className="text-gray-700 hover:text-primary-600 focus:outline-none">
@@ -150,8 +199,6 @@ const Navbar = () => {
         {isOpen && (
           <div className="md:hidden">
             <div className="px-2 pt-2 pb-3 space-y-1 bg-gray-50 border-t border-gray-200">
-
-              {/* Guest links */}
               {!currentUser && publicLinks.map(link => (
                 <Link key={link.to} to={link.to}
                   className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600"
@@ -160,9 +207,8 @@ const Navbar = () => {
                 </Link>
               ))}
 
-              {/* Logged-in dashboard links */}
               {currentUser && dashboardLinks.map(link => (
-                <Link key={link.label} to={link.to}
+                <Link key={link.to} to={link.to}
                   className={`flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium ${
                     location.pathname === link.to
                       ? 'bg-primary-50 text-primary-600'
@@ -174,7 +220,6 @@ const Navbar = () => {
                 </Link>
               ))}
 
-              {/* User info + logout */}
               {currentUser ? (
                 <div className="border-t border-gray-200 pt-3 mt-2">
                   <div className="px-3 py-2 mb-1">
@@ -183,6 +228,7 @@ const Navbar = () => {
                     </p>
                     <p className="text-xs text-gray-500 capitalize">
                       {userProfile?.role} • {userProfile?.status}
+                      {position ? ` • ${POSITION_LABELS[position]}` : ''}
                     </p>
                   </div>
                   <button

@@ -5,7 +5,6 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import toast from 'react-hot-toast';
-
 // ── Action category colours ───────────────────────────────────────────────────
 const getActionStyle = (action = '') => {
   if (action.startsWith('member.'))        return 'bg-blue-100   text-blue-800';

@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Users, Calendar, FileText, MessageCircle,
   CheckCircle, Clock, Plus, X, Save, Trash2,
-  Edit2, Award
+  Edit2, Award, Shield
 } from 'lucide-react';
 import {
   collection, query, getDocs, orderBy,
@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import Members from './Members';
 import Leadership from './Leadership';
 import AdminEvents from './Events';
@@ -38,6 +39,7 @@ const Modal = ({ title, onClose, children }) => (
 // ─── main component ───────────────────────────────────────────────────────────
 const AdminDashboard = () => {
   const { currentUser } = useAuth();
+  const perms = usePermissions();
   const { tab } = useParams();
   const navigate = useNavigate();
 
@@ -279,7 +281,9 @@ const AdminDashboard = () => {
                 { label: 'Pending Approval', value: stats.pendingUsers,      color: 'yellow', icon: Clock         },
                 { label: 'Events',           value: stats.totalEvents,       color: 'green',  icon: Calendar      },
                 { label: 'Blog Posts',       value: stats.totalPosts,        color: 'purple', icon: FileText      },
-                { label: 'Help Messages',    value: stats.anonymousMessages, color: 'red',    icon: MessageCircle },
+                { label: 'Help Messages',
+                  value: perms.canViewMessages ? stats.anonymousMessages : 'N/A',
+                  color: 'red',    icon: MessageCircle },
               ].map((s, i) => (
                 <div key={i} className="card p-5">
                   <div className="flex items-center gap-3">
@@ -295,39 +299,61 @@ const AdminDashboard = () => {
               ))}
             </div>
 
-            {/* Quick Actions */}
+            {/* Quick Actions — only actions the current role can perform */}
             <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <button onClick={() => { navigate('/admin/events'); openCreateEvent(); }}
-                className="card p-5 hover:shadow-lg transition-shadow text-left">
-                <Calendar className="h-8 w-8 text-primary-600 mb-2" />
-                <h3 className="font-semibold text-gray-900">Create Event</h3>
-                <p className="text-sm text-gray-500">Add a new awareness event</p>
-              </button>
-              <button onClick={() => { navigate('/admin/posts'); openCreatePost(); }}
-                className="card p-5 hover:shadow-lg transition-shadow text-left">
-                <FileText className="h-8 w-8 text-secondary-600 mb-2" />
-                <h3 className="font-semibold text-gray-900">Write Article</h3>
-                <p className="text-sm text-gray-500">Publish a new blog post</p>
-              </button>
-              <button onClick={() => navigate('/admin/members')}
-                className="card p-5 hover:shadow-lg transition-shadow text-left">
-                <Users className="h-8 w-8 text-blue-600 mb-2" />
-                <h3 className="font-semibold text-gray-900">Manage Members</h3>
-                <p className="text-sm text-gray-500">{stats.pendingUsers} pending approval</p>
-              </button>
-              <button onClick={() => navigate('/admin/leadership')}
-                className="card p-5 hover:shadow-lg transition-shadow text-left">
-                <MessageCircle className="h-8 w-8 text-purple-600 mb-2" />
-                <h3 className="font-semibold text-gray-900">Leadership</h3>
-                <p className="text-sm text-gray-500">Manage official positions</p>
-              </button>
-              <button onClick={() => navigate('/admin/messages')}
-                className="card p-5 hover:shadow-lg transition-shadow text-left">
-                <MessageCircle className="h-8 w-8 text-red-600 mb-2" />
-                <h3 className="font-semibold text-gray-900">Help Messages</h3>
-                <p className="text-sm text-gray-500">{messages.filter(m => !m.isReplied).length} unread</p>
-              </button>
+              {perms.canManageEvents && (
+                <button onClick={() => { navigate('/admin/events'); openCreateEvent(); }}
+                  className="card p-5 hover:shadow-lg transition-shadow text-left">
+                  <Calendar className="h-8 w-8 text-primary-600 mb-2" />
+                  <h3 className="font-semibold text-gray-900">Create Event</h3>
+                  <p className="text-sm text-gray-500">Add a new awareness event</p>
+                </button>
+              )}
+              {perms.canManagePosts && (
+                <button onClick={() => { navigate('/admin/posts'); openCreatePost(); }}
+                  className="card p-5 hover:shadow-lg transition-shadow text-left">
+                  <FileText className="h-8 w-8 text-secondary-600 mb-2" />
+                  <h3 className="font-semibold text-gray-900">
+                    {perms.canPublishPosts ? 'Write Article' : 'Draft Article'}
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    {perms.canPublishPosts ? 'Publish a new blog post' : 'Create a draft for approval'}
+                  </p>
+                </button>
+              )}
+              {perms.canEditMembers && (
+                <button onClick={() => navigate('/admin/members')}
+                  className="card p-5 hover:shadow-lg transition-shadow text-left">
+                  <Users className="h-8 w-8 text-blue-600 mb-2" />
+                  <h3 className="font-semibold text-gray-900">Manage Members</h3>
+                  <p className="text-sm text-gray-500">{stats.pendingUsers} pending approval</p>
+                </button>
+              )}
+              {!perms.canEditMembers && perms.canViewMembers && (
+                <button onClick={() => navigate('/admin/members')}
+                  className="card p-5 hover:shadow-lg transition-shadow text-left">
+                  <Users className="h-8 w-8 text-blue-600 mb-2" />
+                  <h3 className="font-semibold text-gray-900">View Members</h3>
+                  <p className="text-sm text-gray-500">Browse member list</p>
+                </button>
+              )}
+              {perms.canManageLeadership && (
+                <button onClick={() => navigate('/admin/leadership')}
+                  className="card p-5 hover:shadow-lg transition-shadow text-left">
+                  <Award className="h-8 w-8 text-purple-600 mb-2" />
+                  <h3 className="font-semibold text-gray-900">Leadership</h3>
+                  <p className="text-sm text-gray-500">Manage official positions</p>
+                </button>
+              )}
+              {perms.canViewMessages && (
+                <button onClick={() => navigate('/admin/messages')}
+                  className="card p-5 hover:shadow-lg transition-shadow text-left">
+                  <MessageCircle className="h-8 w-8 text-red-600 mb-2" />
+                  <h3 className="font-semibold text-gray-900">Help Messages</h3>
+                  <p className="text-sm text-gray-500">{messages.filter(m => !m.isReplied).length} unread</p>
+                </button>
+              )}
             </div>
           </>
         )}
@@ -337,19 +363,27 @@ const AdminDashboard = () => {
 
         {/* ── POSTS TAB ── */}
         {activeTab === 'posts' && (
+          !perms.canViewPosts ? (
+            <div className="card p-12 text-center">
+              <Shield className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+              <p className="text-gray-500">You do not have access to this section.</p>
+            </div>
+          ) : (
           <>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-gray-900">Blog Posts ({posts.length})</h2>
+              {perms.canManagePosts && (
               <button onClick={openCreatePost} className="btn-primary flex items-center gap-2">
-                <Plus className="h-4 w-4" /> Write Article
+                <Plus className="h-4 w-4" /> {perms.canPublishPosts ? 'Write Article' : 'Draft Article'}
               </button>
+              )}
             </div>
 
             {posts.length === 0 ? (
               <div className="card p-12 text-center">
                 <FileText className="h-16 w-16 mx-auto text-gray-300 mb-4" />
                 <p className="text-gray-500 mb-4">No articles yet</p>
-                <button onClick={openCreatePost} className="btn-primary">Write First Article</button>
+                {perms.canManagePosts && <button onClick={openCreatePost} className="btn-primary">Write First Article</button>}
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -364,10 +398,12 @@ const AdminDashboard = () => {
                           className="text-blue-600 hover:text-blue-700 p-1">
                           <Edit2 className="h-4 w-4" />
                         </button>
+                        {perms.canDeletePosts && (
                         <button onClick={() => deletePost(p.id)}
                           className="text-red-500 hover:text-red-600 p-1">
                           <Trash2 className="h-4 w-4" />
                         </button>
+                        )}
                       </div>
                     </div>
                     <h3 className="font-semibold text-gray-900 text-lg mb-2">{p.title}</h3>
@@ -378,6 +414,7 @@ const AdminDashboard = () => {
               </div>
             )}
           </>
+          )
         )}
 
         {/* ── MEMBERS TAB ── */}
@@ -392,8 +429,18 @@ const AdminDashboard = () => {
         {/* ── ACTIVITY LOG TAB ── */}
         {activeTab === 'activity' && <ActivityLog />}
 
-        {/* ── MESSAGES TAB ── */}
+        {/* ── MESSAGES TAB — only admins/president/vp/secretary ── */}
         {activeTab === 'messages' && (
+          !perms.canViewMessages ? (
+            <div className="card p-12 text-center">
+              <Shield className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+              <p className="text-gray-500">
+                {perms.canViewMessageStats
+                  ? `${stats.anonymousMessages} help messages received. Contact the club administrator for details.`
+                  : 'You do not have access to this section.'}
+              </p>
+            </div>
+          ) : (
           <>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-gray-900">Help Messages ({messages.length})</h2>
@@ -441,6 +488,7 @@ const AdminDashboard = () => {
               </div>
             )}
           </>
+          )
         )}
       </div>
 

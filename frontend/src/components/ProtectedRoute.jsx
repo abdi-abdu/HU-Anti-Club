@@ -1,17 +1,37 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { usePermissions } from '../hooks/usePermissions';
 
-const ProtectedRoute = ({ children, requireAdmin = false, requireActive = true }) => {
+/**
+ * ProtectedRoute
+ *
+ * Props
+ *   requireAdmin   — only website admins (role === 'admin') may pass
+ *   requireOfficer — website admins OR any active club officer may pass
+ *   requireActive  — account must be status === 'active' (default true)
+ *
+ * "requireAdmin" and "requireOfficer" are mutually exclusive in practice;
+ * requireAdmin is the stricter gate.
+ *
+ * Club position is resolved from positionIndex via usePermissions.
+ * While position is still loading we show a spinner to avoid false redirects.
+ */
+const ProtectedRoute = ({
+  children,
+  requireAdmin   = false,
+  requireOfficer = false,
+  requireActive  = true,
+}) => {
   const { currentUser, userProfile } = useAuth();
+  const { canViewDashboard, loading: permLoading } = usePermissions();
 
-  // Not logged in → redirect to login
+  // 1. Not logged in
   if (!currentUser) {
     return <Navigate to="/login" replace />;
   }
 
-  // Auth resolved but Firestore profile is still loading
-  // Show a spinner rather than incorrectly redirecting
+  // 2. Auth resolved but Firestore user profile still loading
   if (!userProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -20,7 +40,7 @@ const ProtectedRoute = ({ children, requireAdmin = false, requireActive = true }
     );
   }
 
-  // Account not yet approved or deactivated
+  // 3. Account not active
   if (requireActive && userProfile.status !== 'active') {
     const isDeactivated = userProfile.status === 'deactivated';
     return (
@@ -44,9 +64,23 @@ const ProtectedRoute = ({ children, requireAdmin = false, requireActive = true }
     );
   }
 
-  // Trying to access admin route without admin role → back to home
+  // 4. Admin-only gate (strictest)
   if (requireAdmin && userProfile.role !== 'admin') {
     return <Navigate to="/" replace />;
+  }
+
+  // 5. Officer-or-admin gate — wait for position to resolve before redirecting
+  if (requireOfficer) {
+    if (permLoading) {
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
+        </div>
+      );
+    }
+    if (!canViewDashboard) {
+      return <Navigate to="/" replace />;
+    }
   }
 
   return children;

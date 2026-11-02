@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/AuthContext';
+import { usePermissions } from './hooks/usePermissions';
 import Navbar from './components/Layout/Navbar';
 import Footer from './components/Layout/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -22,15 +23,23 @@ import AdminDashboard from './pages/Admin/Dashboard';
 // Redirects logged-in users away from guest-only pages
 const GuestRoute = ({ children }) => {
   const { currentUser, userProfile } = useAuth();
+  const { canViewDashboard } = usePermissions();
   if (currentUser && userProfile) {
-    return <Navigate to={userProfile.role === 'admin' ? '/admin' : '/profile'} replace />;
+    // Admins and club officers go to the dashboard; everyone else to profile
+    const dest = (userProfile.role === 'admin' || canViewDashboard) ? '/admin' : '/profile';
+    return <Navigate to={dest} replace />;
   }
   return children;
 };
 
-// Wraps a route in admin ProtectedRoute
+// Admin-only route (website administrators)
 const AdminRoute = ({ children }) => (
   <ProtectedRoute requireAdmin={true}>{children}</ProtectedRoute>
+);
+
+// Officer-or-admin route (admins + any active club officer)
+const OfficerRoute = ({ children }) => (
+  <ProtectedRoute requireOfficer={true}>{children}</ProtectedRoute>
 );
 
 function AppRoutes() {
@@ -56,19 +65,47 @@ function AppRoutes() {
             <ProtectedRoute><Profile /></ProtectedRoute>
           } />
 
-          {/* ── Admin routes ─────────────────────────────────────────────
-              All specific sub-paths MUST come before the dynamic :tab route
-              so React Router matches them first.
+          {/* ── Dashboard routes ────────────────────────────────────────────
+              Specific sub-paths listed before the dynamic :tab catch-all.
+              Admin-only sections use AdminRoute.
+              Sections accessible to club officers use OfficerRoute.
           ──────────────────────────────────────────────────────────────── */}
-          <Route path="/admin"                  element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/members"          element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/leadership"       element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/events"           element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/posts"            element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/announcements"    element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/messages"         element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/activity"         element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/:tab"             element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+
+          {/* Overview: any officer or admin */}
+          <Route path="/admin"
+            element={<OfficerRoute><AdminDashboard /></OfficerRoute>} />
+
+          {/* Members: all five roles can view; edit/deactivate gated inside component */}
+          <Route path="/admin/members"
+            element={<OfficerRoute><AdminDashboard /></OfficerRoute>} />
+
+          {/* Leadership: admin + supervisor (enforced inside Leadership.jsx too) */}
+          <Route path="/admin/leadership"
+            element={<OfficerRoute><AdminDashboard /></OfficerRoute>} />
+
+          {/* Events: all officers can access (create/cancel/delete gated inside) */}
+          <Route path="/admin/events"
+            element={<OfficerRoute><AdminDashboard /></OfficerRoute>} />
+
+          {/* Posts: all officers access; delete/approve gated inside */}
+          <Route path="/admin/posts"
+            element={<OfficerRoute><AdminDashboard /></OfficerRoute>} />
+
+          {/* Announcements: all officers */}
+          <Route path="/admin/announcements"
+            element={<OfficerRoute><AdminDashboard /></OfficerRoute>} />
+
+          {/* Help Messages: admin + president/vp/secretary (not supervisor) */}
+          <Route path="/admin/messages"
+            element={<OfficerRoute><AdminDashboard /></OfficerRoute>} />
+
+          {/* Activity Log: all five roles */}
+          <Route path="/admin/activity"
+            element={<OfficerRoute><AdminDashboard /></OfficerRoute>} />
+
+          {/* Generic fallback for any other /admin/:tab */}
+          <Route path="/admin/:tab"
+            element={<OfficerRoute><AdminDashboard /></OfficerRoute>} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />

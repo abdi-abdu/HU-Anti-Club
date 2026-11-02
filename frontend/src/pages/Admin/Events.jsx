@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { logAction, LOG } from '../../services/activityLog';
 import toast from 'react-hot-toast';
 
@@ -59,6 +60,7 @@ const Modal = ({ title, onClose, children, size = 'md' }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 const AdminEvents = () => {
   const { currentUser } = useAuth();
+  const perms = usePermissions();
 
   const [events,      setEvents]      = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -240,8 +242,7 @@ const AdminEvents = () => {
         </div>
         <button onClick={openCreate} className="btn-primary flex items-center gap-2 self-start">
           <Plus className="h-4 w-4" /> Create Event
-        </button>
-      </div>
+        </button>      </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
@@ -311,14 +312,18 @@ const AdminEvents = () => {
                     <h3 className="font-semibold text-gray-900">{ev.title}</h3>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
+                    {perms.canManageEvents && (
                     <button onClick={() => openEdit(ev)}
                       className="text-blue-600 hover:text-blue-700 p-1.5 rounded hover:bg-blue-50">
                       <Edit2 className="h-4 w-4" />
                     </button>
+                    )}
+                    {perms.canDeleteEvents && (
                     <button onClick={() => setConfirmModal(ev)}
                       className="text-red-500 hover:text-red-600 p-1.5 rounded hover:bg-red-50">
                       <Trash2 className="h-4 w-4" />
                     </button>
+                    )}
                   </div>
                 </div>
 
@@ -352,8 +357,8 @@ const AdminEvents = () => {
                     </button>
                   )}
 
-                  {/* Cancel */}
-                  {status !== 'cancelled' && (
+                  {/* Cancel — president/admin only */}
+                  {status !== 'cancelled' && perms.canCancelEvents && (
                     <button
                       onClick={async () => {
                         await updateDoc(doc(db, 'events', ev.id), { status: 'cancelled', updatedAt: serverTimestamp() });
@@ -365,8 +370,8 @@ const AdminEvents = () => {
                     </button>
                   )}
 
-                  {/* Restore cancelled */}
-                  {status === 'cancelled' && (
+                  {/* Restore cancelled — president/admin only */}
+                  {status === 'cancelled' && perms.canCancelEvents && (
                     <button
                       onClick={async () => {
                         await updateDoc(doc(db, 'events', ev.id), { status: 'draft', updatedAt: serverTimestamp() });
