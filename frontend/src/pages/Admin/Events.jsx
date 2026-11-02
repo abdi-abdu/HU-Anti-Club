@@ -240,9 +240,12 @@ const AdminEvents = () => {
             {counts.total} total · {counts.published} published · {counts.drafts} drafts
           </p>
         </div>
-        <button onClick={openCreate} className="btn-primary flex items-center gap-2 self-start">
-          <Plus className="h-4 w-4" /> Create Event
-        </button>      </div>
+        {perms.canManageEvents && (
+          <button onClick={openCreate} className="btn-primary flex items-center gap-2 self-start">
+            <Plus className="h-4 w-4" /> Create Event
+          </button>
+        )}
+      </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
@@ -290,7 +293,9 @@ const AdminEvents = () => {
           <p className="text-gray-500 mb-4">
             {filterStatus === 'all' ? 'No events yet.' : `No ${filterStatus} events.`}
           </p>
-          <button onClick={openCreate} className="btn-primary">Create First Event</button>
+          {perms.canManageEvents && (
+            <button onClick={openCreate} className="btn-primary">Create First Event</button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -343,7 +348,7 @@ const AdminEvents = () => {
                 {/* Action bar */}
                 <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100">
                   {/* Publish / Unpublish toggle */}
-                  {status !== 'cancelled' && (
+                  {perms.canManageEvents && status !== 'cancelled' && (
                     <button onClick={() => togglePublish(ev)}
                       className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
                         status === 'published'

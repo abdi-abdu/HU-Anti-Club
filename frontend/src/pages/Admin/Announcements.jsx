@@ -197,9 +197,11 @@ const Announcements = () => {
             {counts.total} total · {counts.published} published · {counts.drafts} drafts
           </p>
         </div>
-        <button onClick={openCreate} className="btn-primary flex items-center gap-2 self-start">
-          <Plus className="h-4 w-4" /> New Announcement
-        </button>
+        {perms.canManageAnnouncements && (
+          <button onClick={openCreate} className="btn-primary flex items-center gap-2 self-start">
+            <Plus className="h-4 w-4" /> New Announcement
+          </button>
+        )}
       </div>
 
       {/* Summary cards */}
@@ -246,7 +248,9 @@ const Announcements = () => {
           <p className="text-gray-500 mb-4">
             {filterStatus === 'all' ? 'No announcements yet.' : `No ${filterStatus} announcements.`}
           </p>
-          <button onClick={openCreate} className="btn-primary">Create First Announcement</button>
+          {perms.canManageAnnouncements && (
+            <button onClick={openCreate} className="btn-primary">Create First Announcement</button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -282,21 +286,25 @@ const Announcements = () => {
 
                   {/* Actions */}
                   <div className="flex flex-col gap-1.5 flex-shrink-0">
-                    <button onClick={() => openEdit(item)}
-                      className="flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1.5 rounded text-xs transition-colors">
-                      <Edit2 className="h-3 w-3" /> Edit
-                    </button>
-                    <button onClick={() => togglePublish(item)}
-                      className={`flex items-center gap-1 px-2 py-1.5 rounded text-xs transition-colors ${
-                        item.published
-                          ? 'bg-gray-100 hover:bg-gray-200 text-gray-600'
-                          : 'bg-green-600 hover:bg-green-700 text-white'
-                      }`}>
-                      {item.published
-                        ? <><EyeOff className="h-3 w-3" /> Unpublish</>
-                        : <><Eye className="h-3 w-3" /> Publish</>
-                      }
-                    </button>
+                    {perms.canManageAnnouncements && (
+                      <>
+                        <button onClick={() => openEdit(item)}
+                          className="flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1.5 rounded text-xs transition-colors">
+                          <Edit2 className="h-3 w-3" /> Edit
+                        </button>
+                        <button onClick={() => togglePublish(item)}
+                          className={`flex items-center gap-1 px-2 py-1.5 rounded text-xs transition-colors ${
+                            item.published
+                              ? 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+                              : 'bg-green-600 hover:bg-green-700 text-white'
+                          }`}>
+                          {item.published
+                            ? <><EyeOff className="h-3 w-3" /> Unpublish</>
+                            : <><Eye className="h-3 w-3" /> Publish</>
+                          }
+                        </button>
+                      </>
+                    )}
                     {perms.canDeleteAnnouncements && (
                     <button onClick={() => setConfirmDel(item)}
                       className="flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1.5 rounded text-xs transition-colors">

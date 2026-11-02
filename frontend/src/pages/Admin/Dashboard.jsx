@@ -79,12 +79,20 @@ const AdminDashboard = () => {
   // ── fetch all data ──────────────────────────────────────────────────────────
   const fetchAll = async () => {
     try {
-      const [usersSnap, eventsSnap, postsSnap, msgsSnap] = await Promise.all([
+      // Fetch messages only if user has permission to view individual messages
+      // Supervisors can see message count but not read individual messages
+      const fetchPromises = [
         getDocs(collection(db, 'users')),
         getDocs(query(collection(db, 'events'), orderBy('createdAt', 'desc'))),
         getDocs(query(collection(db, 'posts'),  orderBy('createdAt', 'desc'))),
-        getDocs(query(collection(db, 'anonymousMessages'), orderBy('createdAt', 'desc'))),
-      ]);
+      ];
+
+      if (perms.canViewMessages) {
+        fetchPromises.push(getDocs(query(collection(db, 'anonymousMessages'), orderBy('createdAt', 'desc'))));
+      }
+
+      const results = await Promise.all(fetchPromises);
+      const [usersSnap, eventsSnap, postsSnap, msgsSnap] = results;
 
       const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       const pending = users.filter(u => u.status === 'pending');
@@ -93,13 +101,17 @@ const AdminDashboard = () => {
       setPendingUsers(pending);
       setEvents(eventsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setPosts(postsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setMessages(msgsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      
+      if (msgsSnap) {
+        setMessages(msgsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }
+
       setStats({
         totalUsers:        users.filter(u => u.status !== 'deactivated').length,
         pendingUsers:      pending.length,
         totalEvents:       eventsSnap.size,
         totalPosts:        postsSnap.size,
-        anonymousMessages: msgsSnap.size,
+        anonymousMessages: msgsSnap ? msgsSnap.size : 0,
       });
     } catch (err) {
       console.error(err);
@@ -109,7 +121,12 @@ const AdminDashboard = () => {
     }
   };
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    // Wait for permissions to load before fetching data
+    if (!perms.loading) {
+      fetchAll();
+    }
+  }, [perms.loading]);
 
   // ── helpers ─────────────────────────────────────────────────────────────────
   const formatDate = (ts) => {
@@ -394,10 +411,12 @@ const AdminDashboard = () => {
                         {p.category}
                       </span>
                       <div className="flex gap-2">
-                        <button onClick={() => openEditPost(p)}
-                          className="text-blue-600 hover:text-blue-700 p-1">
-                          <Edit2 className="h-4 w-4" />
-                        </button>
+                        {perms.canManagePosts && (
+                          <button onClick={() => openEditPost(p)}
+                            className="text-blue-600 hover:text-blue-700 p-1">
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                        )}
                         {perms.canDeletePosts && (
                         <button onClick={() => deletePost(p.id)}
                           className="text-red-500 hover:text-red-600 p-1">
