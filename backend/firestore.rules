@@ -159,18 +159,22 @@ service cloud.firestore {
              'title', 'message', 'published', 'createdBy', 'createdAt'
            ]);
 
-      // Update: Admin, President, VP, Secretary
-      allow update: if isAdmin()
-        || (isSignedIn()
-          && (
-            (exists(/databases/$(database)/documents/positionIndex/president)
-              && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
-            || (exists(/databases/$(database)/documents/positionIndex/vice_president)
-              && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
-            || (exists(/databases/$(database)/documents/positionIndex/secretary)
-              && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
-          )
-        );
+      // Update: Admin has unrestricted access
+      allow update: if isAdmin();
+
+      // Update: President, VP, Secretary — editable fields only (protects createdBy, createdAt)
+      allow update: if isSignedIn()
+        && (
+          (exists(/databases/$(database)/documents/positionIndex/president)
+            && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+          || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+            && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+          || (exists(/databases/$(database)/documents/positionIndex/secretary)
+            && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+        )
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['title', 'message', 'type', 'published', 'publishedAt', 'updatedAt']);
 
       // Delete: Admin and President only
       allow delete: if isAdmin()
@@ -202,16 +206,20 @@ service cloud.firestore {
              'memberId', 'position', 'startDate', 'status', 'createdBy', 'createdAt'
            ]);
 
-      // Admins can update any appointment.
+      // Admins can update any appointment (unrestricted).
+      allow update: if isAdmin();
+
       // Active Supervisor can update president, vice_president, secretary appointments
-      // but NOT the supervisor appointment.
-      allow update: if isAdmin()
-        || (
-          isSignedIn()
-          && exists(/databases/$(database)/documents/positionIndex/supervisor)
-          && get(/databases/$(database)/documents/positionIndex/supervisor).data.memberId == request.auth.uid
-          && resource.data.position != 'supervisor'
-        );
+      // but NOT the supervisor appointment. Restricted to editable fields only.
+      allow update: if isSignedIn()
+        && exists(/databases/$(database)/documents/positionIndex/supervisor)
+        && get(/databases/$(database)/documents/positionIndex/supervisor).data.memberId == request.auth.uid
+        && resource.data.position != 'supervisor'
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['startDate', 'endDate', 'notes', 'photoUrl', 'showPublicly',
+                       'memberName', 'memberCollege', 'memberDept', 
+                       'updatedAt', 'updatedBy']);
     }
 
     // ── positionIndex ─────────────────────────────────────────────────────────
@@ -255,14 +263,26 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/leadership/$(request.resource.data.appointmentId)).data.memberId == request.resource.data.memberId
         && getAfter(/databases/$(database)/documents/leadership/$(request.resource.data.appointmentId)).data.status == 'active';
 
-      // Delete (end appointment): admin can delete any; supervisor can delete president/vp/secretary
-      allow delete: if isAdmin()
-        || (
-          positionId in ['president', 'vice_president', 'secretary']
-          && isSignedIn()
-          && exists(/databases/$(database)/documents/positionIndex/supervisor)
-          && get(/databases/$(database)/documents/positionIndex/supervisor).data.memberId == request.auth.uid
-        );
+      // Delete (end appointment): admin can delete any; supervisor can delete president/vp/secretary.
+      // Requires that the index references a valid active appointment. This prevents:
+      //   - Deletion of non-existent/stale index entries
+      //   - Multiple deletions of the same index
+      // LIMITATION: Rules cannot enforce that the appointment is being ended in the same batch.
+      // The get() reads the current state (before batch), not the future state (after batch).
+      // Frontend confirmEnd() enforces batch atomicity: delete index + update appointment status.
+      allow delete: if (
+          isAdmin()
+          || (
+            positionId in ['president', 'vice_president', 'secretary']
+            && isSignedIn()
+            && exists(/databases/$(database)/documents/positionIndex/supervisor)
+            && get(/databases/$(database)/documents/positionIndex/supervisor).data.memberId == request.auth.uid
+          )
+        )
+        && exists(/databases/$(database)/documents/positionIndex/$(positionId))
+        && resource.data.keys().hasAll(['memberId', 'appointmentId'])
+        && exists(/databases/$(database)/documents/leadership/$(resource.data.appointmentId))
+        && get(/databases/$(database)/documents/leadership/$(resource.data.appointmentId)).data.status == 'active';
     }
 
     // ── events ──────────────────────────────────────────────────────────────
@@ -290,18 +310,23 @@ service cloud.firestore {
            ])
         && request.resource.data.createdBy == request.auth.uid;
 
-      // Update: Admin, President, VP, Secretary
-      allow update: if isAdmin()
-        || (isSignedIn()
-          && (
-            (exists(/databases/$(database)/documents/positionIndex/president)
-              && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
-            || (exists(/databases/$(database)/documents/positionIndex/vice_president)
-              && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
-            || (exists(/databases/$(database)/documents/positionIndex/secretary)
-              && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
-          )
-        );
+      // Update: Admin has unrestricted access
+      allow update: if isAdmin();
+
+      // Update: President, VP, Secretary — editable fields only (protects createdBy, createdAt)
+      allow update: if isSignedIn()
+        && (
+          (exists(/databases/$(database)/documents/positionIndex/president)
+            && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+          || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+            && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+          || (exists(/databases/$(database)/documents/positionIndex/secretary)
+            && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+        )
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['title', 'description', 'date', 'location', 'type', 'imageUrl', 
+                       'status', 'updatedAt', 'updatedBy']);
 
       // Delete: Admin and President only
       allow delete: if isAdmin()
@@ -358,18 +383,23 @@ service cloud.firestore {
            ])
         && request.resource.data.authorId == request.auth.uid;
 
-      // Update: Admin, President, VP, Secretary
-      allow update: if isAdmin()
-        || (isSignedIn()
-          && (
-            (exists(/databases/$(database)/documents/positionIndex/president)
-              && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
-            || (exists(/databases/$(database)/documents/positionIndex/vice_president)
-              && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
-            || (exists(/databases/$(database)/documents/positionIndex/secretary)
-              && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
-          )
-        );
+      // Update: Admin has unrestricted access
+      allow update: if isAdmin();
+
+      // Update: President, VP, Secretary — editable fields only (protects authorId, createdAt)
+      allow update: if isSignedIn()
+        && (
+          (exists(/databases/$(database)/documents/positionIndex/president)
+            && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+          || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+            && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+          || (exists(/databases/$(database)/documents/positionIndex/secretary)
+            && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+        )
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['title', 'content', 'category', 'excerpt', 'imageUrl', 
+                       'published', 'featured', 'updatedAt', 'updatedBy']);
 
       // Delete: Admin and President only (spec §4, §5 no delete for VP, §7 no delete for Secretary)
       allow delete: if isAdmin()
