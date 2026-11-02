@@ -68,13 +68,18 @@ service cloud.firestore {
              .hasOnly(['fullName', 'phone', 'department', 'yearOfStudy',
                        'college', 'privacy', 'updatedAt']);
 
-      // Update: admin changes status only
+      // Update: admin or active president changes status
       // Exactly five approved source→destination pairs.
       // All other transitions — including same-status no-ops, pending destination,
       // and cross-assignments — are implicitly blocked by not appearing in any pair.
       // Self-status-change blocked (mirrors UI !isSelf guard at rule level).
       // Protected admin status cannot be changed by any client write.
-      allow update: if isAdmin()
+      allow update: if (
+          isAdmin()
+          || (isSignedIn()
+            && exists(/databases/$(database)/documents/positionIndex/president)
+            && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+        )
         && request.resource.data.diff(resource.data)
              .affectedKeys()
              .hasOnly(['status', 'updatedAt'])
