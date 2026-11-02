@@ -12,17 +12,14 @@ const About = () => {
   useEffect(() => {
     const fetchLeadership = async () => {
       try {
-        const [apptSnap, usersSnap] = await Promise.all([
-          getDocs(query(
-            collection(db, 'leadership'),
-            where('status', '==', 'active'),
-            orderBy('startDate', 'asc')
-          )),
-          getDocs(collection(db, 'users')),
-        ]);
-
-        const usersMap = {};
-        usersSnap.docs.forEach(d => { usersMap[d.id] = d.data(); });
+        // Read only the leadership collection — public, no auth required.
+        // Display name and department are denormalized onto each appointment
+        // document so this page never needs to read the users collection.
+        const apptSnap = await getDocs(query(
+          collection(db, 'leadership'),
+          where('status', '==', 'active'),
+          orderBy('startDate', 'asc')
+        ));
 
         const appts = apptSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
@@ -34,21 +31,15 @@ const About = () => {
         publicAppts.sort((a, b) => (posOrder[a.position] ?? 99) - (posOrder[b.position] ?? 99));
 
         const mapped = publicAppts.map(appt => {
-          const member = usersMap[appt.memberId] || {};
           const posLabel = POSITIONS.find(p => p.id === appt.position)?.label || appt.position;
-
-          // Photo resolution priority:
-          // 1. appointment.photoUrl (uploaded or pasted URL — also handles future Firebase Storage URLs)
-          // 2. local /images/team/{memberId}.jpg fallback
-          // Both are passed to the card; the card handles the onError fallback
           return {
             id:         appt.id,
-            name:       member.fullName   || 'Unknown',
+            name:       appt.memberName   || 'Unknown',
             role:       posLabel,
-            department: member.college    || member.department || '',
-            photoUrl:   appt.photoUrl     || null,   // priority 1
-            localPhoto: `/images/team/${appt.memberId}.jpg`, // priority 2
-            initials:   (member.fullName || 'U').charAt(0).toUpperCase(),
+            department: appt.memberCollege || appt.memberDept || '',
+            photoUrl:   appt.photoUrl     || null,
+            localPhoto: `/images/team/${appt.memberId}.jpg`,
+            initials:   (appt.memberName || 'U').charAt(0).toUpperCase(),
           };
         });
 

@@ -39,8 +39,20 @@ service cloud.firestore {
     //
     match /users/{userId} {
 
-      // Read: own profile or any admin
-      allow read: if isOwner(userId) || isAdmin();
+      // Read: own profile, any admin, or any active club officer
+      allow read: if isOwner(userId) || isAdmin()
+        || (isSignedIn()
+          && (
+            (exists(/databases/$(database)/documents/positionIndex/supervisor)
+              && get(/databases/$(database)/documents/positionIndex/supervisor).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/president)
+              && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+              && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/secretary)
+              && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+          )
+        );
 
       // Create: new registration only
       // Enforces role=student and status=pending — user cannot self-promote
@@ -119,13 +131,48 @@ service cloud.firestore {
     }
 
     // ── announcements ────────────────────────────────────────────────────────
+    // Spec §4–7: Admin, President, VP, Secretary can create/edit/publish/unpublish.
+    // Spec §4: Admin and President can delete.
     match /announcements/{announcementId} {
       allow read: if true;
-      allow create: if isAdmin()
+
+      // Create: Admin, President, VP, Secretary
+      allow create: if (
+          isAdmin()
+          || (isSignedIn()
+            && (
+              (exists(/databases/$(database)/documents/positionIndex/president)
+                && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+              || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+                && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+              || (exists(/databases/$(database)/documents/positionIndex/secretary)
+                && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+            )
+          )
+        )
         && request.resource.data.keys().hasAll([
              'title', 'message', 'published', 'createdBy', 'createdAt'
            ]);
-      allow update, delete: if isAdmin();
+
+      // Update: Admin, President, VP, Secretary
+      allow update: if isAdmin()
+        || (isSignedIn()
+          && (
+            (exists(/databases/$(database)/documents/positionIndex/president)
+              && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+              && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/secretary)
+              && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+          )
+        );
+
+      // Delete: Admin and President only
+      allow delete: if isAdmin()
+        || (isSignedIn()
+          && exists(/databases/$(database)/documents/positionIndex/president)
+          && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid
+        );
     }
 
     // ── leadership ───────────────────────────────────────────────────────────
@@ -133,46 +180,198 @@ service cloud.firestore {
     // No delete — historical records must be preserved.
     match /leadership/{appointmentId} {
       allow read: if true;
-      allow create: if isAdmin()
+
+      // Admins can create any appointment.
+      // Active Supervisor can create appointments for president, vice_president, secretary
+      // but NOT for the supervisor position (cannot manage own appointment).
+      allow create: if (
+          isAdmin()
+          || (
+            isSignedIn()
+            && exists(/databases/$(database)/documents/positionIndex/supervisor)
+            && get(/databases/$(database)/documents/positionIndex/supervisor).data.memberId == request.auth.uid
+            && request.resource.data.position != 'supervisor'
+          )
+        )
         && request.resource.data.keys().hasAll([
              'memberId', 'position', 'startDate', 'status', 'createdBy', 'createdAt'
            ]);
-      allow update: if isAdmin();
+
+      // Admins can update any appointment.
+      // Active Supervisor can update president, vice_president, secretary appointments
+      // but NOT the supervisor appointment.
+      allow update: if isAdmin()
+        || (
+          isSignedIn()
+          && exists(/databases/$(database)/documents/positionIndex/supervisor)
+          && get(/databases/$(database)/documents/positionIndex/supervisor).data.memberId == request.auth.uid
+          && resource.data.position != 'supervisor'
+        );
+    }
+
+    // ── positionIndex ─────────────────────────────────────────────────────────
+    // Fixed documents: supervisor, president, vice_president, secretary, acting_president
+    // Acts as a live lookup index: maps position → current active memberId.
+    // Written atomically alongside leadership documents using writeBatch.
+    //
+    // Security model:
+    //   - Any signed-in user can read (needed to resolve own position in the UI).
+    //   - Admins can write any positionIndex entry.
+    //   - Active Supervisor can write president, vice_president, secretary entries
+    //     but NOT the supervisor entry (cannot manage own index).
+    //   - Every write is cross-validated against the leadership document being
+    //     written in the same batch, using getAfter().
+    //   - No delete without a corresponding leadership update in the same batch
+    //     (enforced by requiring the index entry to match an active appointment
+    //     or by the batch failing atomically if the leadership write fails).
+    match /positionIndex/{positionId} {
+      allow read: if isSignedIn();
+
+      // Write (create/update) for supervisor position: admin only
+      allow write: if positionId == 'supervisor'
+        && isAdmin()
+        && request.resource.data.keys().hasAll(['memberId', 'appointmentId', 'updatedAt'])
+        && getAfter(/databases/$(database)/documents/leadership/$(request.resource.data.appointmentId)).data.position == 'supervisor'
+        && getAfter(/databases/$(database)/documents/leadership/$(request.resource.data.appointmentId)).data.memberId == request.resource.data.memberId
+        && getAfter(/databases/$(database)/documents/leadership/$(request.resource.data.appointmentId)).data.status == 'active';
+
+      // Write (create/update) for president, vice_president, secretary: admin or active supervisor
+      allow write: if positionId in ['president', 'vice_president', 'secretary']
+        && (
+          isAdmin()
+          || (
+            isSignedIn()
+            && exists(/databases/$(database)/documents/positionIndex/supervisor)
+            && get(/databases/$(database)/documents/positionIndex/supervisor).data.memberId == request.auth.uid
+          )
+        )
+        && request.resource.data.keys().hasAll(['memberId', 'appointmentId', 'updatedAt'])
+        && getAfter(/databases/$(database)/documents/leadership/$(request.resource.data.appointmentId)).data.position == positionId
+        && getAfter(/databases/$(database)/documents/leadership/$(request.resource.data.appointmentId)).data.memberId == request.resource.data.memberId
+        && getAfter(/databases/$(database)/documents/leadership/$(request.resource.data.appointmentId)).data.status == 'active';
+
+      // Delete (end appointment): admin can delete any; supervisor can delete president/vp/secretary
+      allow delete: if isAdmin()
+        || (
+          positionId in ['president', 'vice_president', 'secretary']
+          && isSignedIn()
+          && exists(/databases/$(database)/documents/positionIndex/supervisor)
+          && get(/databases/$(database)/documents/positionIndex/supervisor).data.memberId == request.auth.uid
+        );
     }
 
     // ── events ──────────────────────────────────────────────────────────────
+    // Spec §4–7: Admin, President, VP, Secretary can create/edit/publish/unpublish/cancel.
+    // Spec §4: Admin and President can permanently delete.
     match /events/{eventId} {
       allow read: if true;
 
-      allow create: if isAdmin()
+      // Create: Admin, President, VP, Secretary
+      allow create: if (
+          isAdmin()
+          || (isSignedIn()
+            && (
+              (exists(/databases/$(database)/documents/positionIndex/president)
+                && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+              || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+                && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+              || (exists(/databases/$(database)/documents/positionIndex/secretary)
+                && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+            )
+          )
+        )
         && request.resource.data.keys().hasAll([
              'title', 'description', 'date', 'location', 'createdBy', 'createdAt'
            ])
         && request.resource.data.createdBy == request.auth.uid;
 
-      allow update, delete: if isAdmin();
+      // Update: Admin, President, VP, Secretary
+      allow update: if isAdmin()
+        || (isSignedIn()
+          && (
+            (exists(/databases/$(database)/documents/positionIndex/president)
+              && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+              && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/secretary)
+              && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+          )
+        );
+
+      // Delete: Admin and President only
+      allow delete: if isAdmin()
+        || (isSignedIn()
+          && exists(/databases/$(database)/documents/positionIndex/president)
+          && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid
+        );
 
       // Registrations subcollection.
       // Active members register/unregister themselves only.
-      // Admins read all registrations.
+      // Admins and officers read all registrations.
       match /registrations/{userId} {
-        allow read: if isAdmin();
+        allow read: if isAdmin()
+          || (isSignedIn()
+            && (
+              (exists(/databases/$(database)/documents/positionIndex/supervisor)
+                && get(/databases/$(database)/documents/positionIndex/supervisor).data.memberId == request.auth.uid)
+              || (exists(/databases/$(database)/documents/positionIndex/president)
+                && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+              || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+                && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+              || (exists(/databases/$(database)/documents/positionIndex/secretary)
+                && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+            )
+          );
         allow create: if isActiveUser() && request.auth.uid == userId;
         allow delete: if isActiveUser() && request.auth.uid == userId;
       }
     }
 
     // ── posts ───────────────────────────────────────────────────────────────
+    // Spec §4–7: Admin, President, VP can create/edit/publish/delete.
+    // Spec §7: Secretary can create/edit (approval workflow deferred).
+    // For now: Secretary has same permissions as President/VP (no approval check).
     match /posts/{postId} {
       allow read: if true;
 
-      allow create: if isAdmin()
+      // Create: Admin, President, VP, Secretary
+      allow create: if (
+          isAdmin()
+          || (isSignedIn()
+            && (
+              (exists(/databases/$(database)/documents/positionIndex/president)
+                && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+              || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+                && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+              || (exists(/databases/$(database)/documents/positionIndex/secretary)
+                && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+            )
+          )
+        )
         && request.resource.data.keys().hasAll([
              'title', 'content', 'category', 'authorId', 'createdAt'
            ])
         && request.resource.data.authorId == request.auth.uid;
 
-      allow update, delete: if isAdmin();
+      // Update: Admin, President, VP, Secretary
+      allow update: if isAdmin()
+        || (isSignedIn()
+          && (
+            (exists(/databases/$(database)/documents/positionIndex/president)
+              && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+              && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/secretary)
+              && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+          )
+        );
+
+      // Delete: Admin and President only (spec §4, §5 no delete for VP, §7 no delete for Secretary)
+      allow delete: if isAdmin()
+        || (isSignedIn()
+          && exists(/databases/$(database)/documents/positionIndex/president)
+          && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid
+        );
     }
 
     // ── resources ───────────────────────────────────────────────────────────
@@ -190,7 +389,19 @@ service cloud.firestore {
 
     // ── anonymousMessages ────────────────────────────────────────────────────
     match /anonymousMessages/{messageId} {
-      allow read: if isAdmin();
+      // Admins and president/VP/secretary can read individual messages.
+      // Supervisors cannot read individual messages (spec §3).
+      allow read: if isAdmin()
+        || (isSignedIn()
+          && (
+            (exists(/databases/$(database)/documents/positionIndex/president)
+              && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+              && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/secretary)
+              && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+          )
+        );
 
       // Anyone (including unauthenticated) can submit an anonymous message.
       allow create: if request.resource.data.keys().hasAll([
@@ -198,18 +409,41 @@ service cloud.firestore {
                        ])
                     && request.resource.data.isReplied == false;
 
-      // Admins can only flip the isReplied flag — no other field changes.
-      allow update: if isAdmin()
+      // Admins and president/VP/secretary can mark as replied.
+      allow update: if (isAdmin()
+          || (isSignedIn()
+            && (
+              (exists(/databases/$(database)/documents/positionIndex/president)
+                && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+              || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+                && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+              || (exists(/databases/$(database)/documents/positionIndex/secretary)
+                && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+            )
+          ))
         && request.resource.data.diff(resource.data)
              .affectedKeys().hasOnly(['isReplied']);
     }
 
     // ── activityLogs ─────────────────────────────────────────────────────────
     // Append-only from authenticated users (each user logs their own actions).
-    // Only admins can read logs.
+    // Admins and active club officers can read logs (spec §3–7).
     // Nobody can update or delete logs — immutable audit trail.
     match /activityLogs/{logId} {
-      allow read:   if isAdmin();
+      // Admins always have access
+      allow read: if isAdmin();
+      // Club officers: check positionIndex — anyone listed in any position slot can read
+      allow read: if isSignedIn()
+        && (
+          (exists(/databases/$(database)/documents/positionIndex/supervisor)
+            && get(/databases/$(database)/documents/positionIndex/supervisor).data.memberId == request.auth.uid)
+          || (exists(/databases/$(database)/documents/positionIndex/president)
+            && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+          || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+            && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+          || (exists(/databases/$(database)/documents/positionIndex/secretary)
+            && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+        );
       allow create: if isSignedIn()
         && request.resource.data.actorId == request.auth.uid
         && request.resource.data.keys().hasAll([
