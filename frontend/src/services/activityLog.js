@@ -19,7 +19,7 @@
  * Logs are immutable — Firestore rules block update and delete.
  */
 
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDoc, doc } from 'firebase/firestore';
 import { db } from './firebase';
 
 /**
@@ -33,9 +33,22 @@ export const logAction = async (actor, action, recordType, recordId, label) => {
   if (!actor?.uid) return; // silently skip if not authenticated
 
   try {
+    // Fetch actor's full name from users collection for better readability
+    let actorName = actor.displayName || actor.email || actor.uid;
+
+    try {
+      const userSnap = await getDoc(doc(db, 'users', actor.uid));
+      if (userSnap.exists()) {
+        actorName = userSnap.data().fullName || actorName;
+      }
+    } catch (nameErr) {
+      // If name fetch fails, use displayName/email fallback
+      console.warn('Could not fetch actor name from users collection:', nameErr.message);
+    }
+
     await addDoc(collection(db, 'activityLogs'), {
       actorId:    actor.uid,
-      actorName:  actor.displayName || actor.email || actor.uid,
+      actorName:  actorName,
       action,
       recordType,
       recordId:   recordId || '',

@@ -32,11 +32,6 @@ const GuestRoute = ({ children }) => {
   return children;
 };
 
-// Admin-only route (website administrators)
-const AdminRoute = ({ children }) => (
-  <ProtectedRoute requireAdmin={true}>{children}</ProtectedRoute>
-);
-
 // Officer-or-admin route (admins + any active club officer)
 const OfficerRoute = ({ children }) => (
   <ProtectedRoute requireOfficer={true}>{children}</ProtectedRoute>

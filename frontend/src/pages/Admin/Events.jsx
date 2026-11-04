@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Calendar, Plus, Edit2, Trash2, X, Save,
-  Eye, EyeOff, MapPin, Clock, Users, AlertTriangle, Ban
+  Eye, EyeOff, MapPin, Users, AlertTriangle, Ban
 } from 'lucide-react';
 import {
   collection, getDocs, doc, addDoc, updateDoc,
@@ -524,7 +524,7 @@ const AdminEvents = () => {
           <div className="flex items-start gap-3 mb-6">
             <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-medium text-gray-900">Delete "{confirmModal.title}"?</p>
+              <p className="font-medium text-gray-900">Delete &quot;{confirmModal.title}&quot;?</p>
               <p className="text-sm text-gray-500 mt-1">
                 This will permanently delete the event and all its registrations. This cannot be undone.
                 Consider cancelling instead to preserve records.

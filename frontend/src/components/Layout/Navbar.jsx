@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   Menu, X, User, LogOut, LayoutDashboard, Calendar,
   FileText, MessageCircle, BookOpen, Users, Award,
-  Bell, Activity, Shield
+  Bell, Activity
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';

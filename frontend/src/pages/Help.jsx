@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MessageCircle, Phone, Mail, Shield, Send, Heart } from 'lucide-react';
+import { MessageCircle, Phone, Shield, Send, Heart } from 'lucide-react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import toast from 'react-hot-toast';
@@ -97,10 +97,10 @@ const Help = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <Heart className="h-16 w-16 mx-auto mb-6 text-white" />
-            <h1 className="text-4xl md:text-5xl font-bold mb-6">We're Here to Help</h1>
+            <h1 className="text-4xl md:text-5xl font-bold mb-6">We&apos;re Here to Help</h1>
             <p className="text-xl md:text-2xl max-w-3xl mx-auto">
               Confidential, judgment-free support for students facing challenges with substance abuse. 
-              You're not alone in this journey.
+              You&apos;re not alone in this journey.
             </p>
           </div>
         </div>
@@ -158,8 +158,8 @@ const Help = () => {
                   <div className="text-sm text-green-800">
                     <p className="font-medium mb-1">Your Privacy is Protected</p>
                     <p>
-                      This message is completely anonymous. We don't collect IP addresses, 
-                      browser information, or any identifying data. Our trained counselors 
+                      This message is completely anonymous. We don&apos;t collect IP addresses,
+                      browser information, or any identifying data. Our trained counselors
                       will respond with general guidance and resources.
                     </p>
                   </div>
@@ -191,7 +191,7 @@ const Help = () => {
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-gray-900 mb-4">Emergency Contacts</h2>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              If you're in immediate danger or need urgent help, contact these services directly.
+              If you&apos;re in immediate danger or need urgent help, contact these services directly.
             </p>
           </div>
 
@@ -253,7 +253,7 @@ const Help = () => {
           </p>
           <div className="bg-white/10 rounded-lg p-6 max-w-2xl mx-auto">
             <p className="text-lg italic">
-              "The first step towards getting somewhere is to decide you're not going to stay where you are."
+              &quot;The first step towards getting somewhere is to decide you&apos;re not going to stay where you are.&quot;
             </p>
             <p className="text-sm mt-2 opacity-80">- J.P. Morgan</p>
           </div>

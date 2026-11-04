@@ -39,13 +39,12 @@ service cloud.firestore {
     //
     match /users/{userId} {
 
-      // Read: own profile, any admin, or any active club officer
+      // Read: own profile, any admin, President, VP, or Secretary only
+      // Supervisor is excluded — use memberProfiles collection for monitoring
       allow read: if isOwner(userId) || isAdmin()
         || (isSignedIn()
           && (
-            (exists(/databases/$(database)/documents/positionIndex/supervisor)
-              && get(/databases/$(database)/documents/positionIndex/supervisor).data.memberId == request.auth.uid)
-            || (exists(/databases/$(database)/documents/positionIndex/president)
+            (exists(/databases/$(database)/documents/positionIndex/president)
               && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
             || (exists(/databases/$(database)/documents/positionIndex/vice_president)
               && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
@@ -66,9 +65,9 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data)
              .affectedKeys()
              .hasOnly(['fullName', 'phone', 'department', 'yearOfStudy',
-                       'college', 'privacy', 'updatedAt']);
+                       'college', 'privacy', 'photoUrl', 'updatedAt']);
 
-      // Update: admin or active president changes status
+      // Update: admin or active president changes status (all five transitions)
       // Exactly five approved source→destination pairs.
       // All other transitions — including same-status no-ops, pending destination,
       // and cross-assignments — are implicitly blocked by not appearing in any pair.
@@ -91,6 +90,24 @@ service cloud.firestore {
           || (resource.data.status == 'active'      && request.resource.data.status == 'deactivated')  // deactivate
           || (resource.data.status == 'deactivated' && request.resource.data.status == 'active'     )  // reactivate
           || (resource.data.status == 'rejected'    && request.resource.data.status == 'active'     )  // reactivate
+           );
+
+      // Update: active vice president changes status (limited transitions only)
+      // VP can approve, reject, and reactivate from rejected status only.
+      // VP CANNOT deactivate active members or reactivate deactivated members.
+      // Self-status-change blocked. Protected admin status cannot be changed.
+      allow update: if isSignedIn()
+        && exists(/databases/$(database)/documents/positionIndex/vice_president)
+        && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['status', 'updatedAt'])
+        && userId != request.auth.uid
+        && userId != '3HL1cghtVvScyiHSLPDGdkIdaMF3'
+        && (
+             (resource.data.status == 'pending'  && request.resource.data.status == 'active'   )  // approve
+          || (resource.data.status == 'pending'  && request.resource.data.status == 'rejected')  // reject
+          || (resource.data.status == 'rejected' && request.resource.data.status == 'active'   )  // reactivate from rejected
            );
 
       // Update: admin removes admin role
@@ -128,9 +145,155 @@ service cloud.firestore {
              .hasOnly(['fullName', 'phone', 'department', 'yearOfStudy',
                        'college', 'updatedAt']);
 
+      // Update: authorized officers (President, VP) edit member profile fields
+      // Same field allowlist as admin edit rule above.
+      // Supervisor and Secretary are explicitly excluded from this rule.
+      // role, status, email, universityId, createdAt, privacy excluded.
+      allow update: if (isSignedIn()
+          && (
+            (exists(/databases/$(database)/documents/positionIndex/president)
+              && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+              && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+          )
+        )
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['fullName', 'phone', 'department', 'yearOfStudy',
+                       'college', 'updatedAt']);
+
       // Delete: admin only
       // Protected admin document cannot be deleted by any client write.
       // To modify the protected admin account use Firebase Console directly.
+      allow delete: if isAdmin()
+        && userId != '3HL1cghtVvScyiHSLPDGdkIdaMF3';
+    }
+
+    // ── memberProfiles ──────────────────────────────────────────────────────
+    //
+    // Non-private member monitoring collection for Supervisor access.
+    // Contains only public member information (no email, no phone).
+    // Synced from users collection via batch writes in registration/update flows.
+    //
+    // Security model:
+    //   - Read: own profile, any admin, or any active club officer (including Supervisor)
+    //   - Write: Read-only for officers — populated via batch writes from backend operations
+    //   - Officers cannot directly write to this collection (prevents data manipulation)
+    //
+    match /memberProfiles/{userId} {
+
+      // Document read: own profile, any admin, or any active club officer (including Supervisor)
+      allow get: if isOwner(userId) || isAdmin()
+        || (isSignedIn()
+          && (
+            (exists(/databases/$(database)/documents/positionIndex/supervisor)
+              && get(/databases/$(database)/documents/positionIndex/supervisor).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/president)
+              && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+              && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/secretary)
+              && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+          )
+        );
+
+      // Collection query: admin or any active club officer (including Supervisor)
+      // Officers need collection-level access for member listing in Leadership and Members pages
+      allow list: if isAdmin()
+        || (isSignedIn()
+          && (
+            (exists(/databases/$(database)/documents/positionIndex/supervisor)
+              && get(/databases/$(database)/documents/positionIndex/supervisor).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/president)
+              && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+              && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+            || (exists(/databases/$(database)/documents/positionIndex/secretary)
+              && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
+          )
+        );
+
+      // Create: during registration OR lazy migration from profile updates
+      // Two scenarios:
+      //   1. Registration: owner creates with role=student, status=pending
+      //   2. Lazy migration: owner/admin/officer creates via set(..., {merge:true})
+      // Blocks email, phone, privacy in all cases
+      allow create: if !request.resource.data.keys().hasAny(['email', 'phone', 'privacy'])
+        && (
+          // Scenario 1: Registration (owner creates with full fields)
+          (isOwner(userId)
+            && request.resource.data.role   == 'student'
+            && request.resource.data.status == 'pending')
+          // Scenario 2: Lazy migration (owner, admin, or authorized officer)
+          || (
+            (isOwner(userId) || isAdmin()
+              || (isSignedIn()
+                && (
+                  (exists(/databases/$(database)/documents/positionIndex/president)
+                    && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+                  || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+                    && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+                )
+              )
+            )
+            // Lazy migration: allows subset of fields (doesn't require role/status)
+            && request.resource.data.keys().hasOnly(['fullName', 'department', 'yearOfStudy',
+                                                      'college', 'status', 'role', 'universityId',
+                                                      'updatedAt', 'createdAt', 'createdBy'])
+          )
+        );
+
+      // Update: owner can edit permitted personal profile fields only.
+      allow update: if isOwner(userId)
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['fullName', 'department', 'yearOfStudy', 'college',
+                       'updatedAt']);
+
+      // Update: admin retains authorized profile synchronization.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['fullName', 'department', 'yearOfStudy', 'college',
+                       'status', 'role', 'universityId', 'updatedAt',
+                       'createdAt', 'createdBy']);
+
+      // Update: President and VP can edit ordinary profile fields.
+      // Role/status changes must match a users update in the same batch.
+      // universityId remains protected.
+      allow update: if isSignedIn()
+        && (
+          (exists(/databases/$(database)/documents/positionIndex/president)
+            && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
+          || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+            && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
+        )
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['fullName', 'department', 'yearOfStudy', 'college',
+                       'status', 'role', 'updatedAt'])
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status'])
+          || (
+            getAfter(/databases/$(database)/documents/users/$(userId)).data.status
+              == request.resource.data.status
+            && getAfter(/databases/$(database)/documents/users/$(userId)).data.diff(
+                 get(/databases/$(database)/documents/users/$(userId)).data
+               ).affectedKeys().hasAny(['status'])
+          )
+        )
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])
+          || (
+            getAfter(/databases/$(database)/documents/users/$(userId)).data.role
+              == request.resource.data.role
+            && getAfter(/databases/$(database)/documents/users/$(userId)).data.diff(
+                 get(/databases/$(database)/documents/users/$(userId)).data
+               ).affectedKeys().hasAny(['role'])
+          )
+        );
+
+      // Delete: admin only (should mirror users collection deletion)
       allow delete: if isAdmin()
         && userId != '3HL1cghtVvScyiHSLPDGdkIdaMF3';
     }
@@ -206,8 +369,24 @@ service cloud.firestore {
              'memberId', 'position', 'startDate', 'status', 'createdBy', 'createdAt'
            ]);
 
-      // Admins can update any appointment (unrestricted).
-      allow update: if isAdmin();
+      // Admins can update appointment metadata and end terms, but cannot
+      // rewrite historical identity (memberId, position, or startDate).
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['endDate', 'status', 'notes', 'photoUrl', 'showPublicly',
+                       'updatedAt', 'updatedBy'])
+        // Ending an active appointment must remove its matching index atomically.
+        && (
+          resource.data.status != 'active'
+          || request.resource.data.status != 'ended'
+          || (
+            exists(/databases/$(database)/documents/positionIndex/$(resource.data.position))
+            && get(/databases/$(database)/documents/positionIndex/$(resource.data.position)).data.appointmentId == appointmentId
+            && get(/databases/$(database)/documents/positionIndex/$(resource.data.position)).data.memberId == resource.data.memberId
+            && !existsAfter(/databases/$(database)/documents/positionIndex/$(resource.data.position))
+          )
+        );
 
       // Active Supervisor can update president, vice_president, secretary appointments
       // but NOT the supervisor appointment. Restricted to editable fields only.
@@ -217,9 +396,19 @@ service cloud.firestore {
         && resource.data.position != 'supervisor'
         && request.resource.data.diff(resource.data)
              .affectedKeys()
-             .hasOnly(['startDate', 'endDate', 'notes', 'photoUrl', 'showPublicly',
-                       'memberName', 'memberCollege', 'memberDept', 
-                       'updatedAt', 'updatedBy']);
+             .hasOnly(['endDate', 'status', 'notes', 'photoUrl', 'showPublicly',
+                       'updatedAt', 'updatedBy'])
+        // Ending an active appointment must remove its matching index atomically.
+        && (
+          resource.data.status != 'active'
+          || request.resource.data.status != 'ended'
+          || (
+            exists(/databases/$(database)/documents/positionIndex/$(resource.data.position))
+            && get(/databases/$(database)/documents/positionIndex/$(resource.data.position)).data.appointmentId == appointmentId
+            && get(/databases/$(database)/documents/positionIndex/$(resource.data.position)).data.memberId == resource.data.memberId
+            && !existsAfter(/databases/$(database)/documents/positionIndex/$(resource.data.position))
+          )
+        );
     }
 
     // ── positionIndex ─────────────────────────────────────────────────────────
@@ -267,9 +456,8 @@ service cloud.firestore {
       // Requires that the index references a valid active appointment. This prevents:
       //   - Deletion of non-existent/stale index entries
       //   - Multiple deletions of the same index
-      // LIMITATION: Rules cannot enforce that the appointment is being ended in the same batch.
-      // The get() reads the current state (before batch), not the future state (after batch).
-      // Frontend confirmEnd() enforces batch atomicity: delete index + update appointment status.
+      // The matching appointment must be marked ended in the same atomic batch.
+      // getAfter() verifies its future state and identity.
       allow delete: if (
           isAdmin()
           || (
@@ -282,7 +470,12 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/positionIndex/$(positionId))
         && resource.data.keys().hasAll(['memberId', 'appointmentId'])
         && exists(/databases/$(database)/documents/leadership/$(resource.data.appointmentId))
-        && get(/databases/$(database)/documents/leadership/$(resource.data.appointmentId)).data.status == 'active';
+        && get(/databases/$(database)/documents/leadership/$(resource.data.appointmentId)).data.status == 'active'
+        // The same atomic batch must end the exact appointment referenced by this index.
+        && existsAfter(/databases/$(database)/documents/leadership/$(resource.data.appointmentId))
+        && getAfter(/databases/$(database)/documents/leadership/$(resource.data.appointmentId)).data.status == 'ended'
+        && getAfter(/databases/$(database)/documents/leadership/$(resource.data.appointmentId)).data.position == positionId
+        && getAfter(/databases/$(database)/documents/leadership/$(resource.data.appointmentId)).data.memberId == resource.data.memberId;
     }
 
     // ── events ──────────────────────────────────────────────────────────────
@@ -313,12 +506,23 @@ service cloud.firestore {
       // Update: Admin has unrestricted access
       allow update: if isAdmin();
 
-      // Update: President, VP, Secretary — editable fields only (protects createdBy, createdAt)
+      // Update: President — editable fields including all status values (draft, published, cancelled)
+      // President can publish, unpublish, cancel, and restore events.
+      allow update: if isSignedIn()
+        && exists(/databases/$(database)/documents/positionIndex/president)
+        && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['title', 'description', 'date', 'location', 'type', 'imageUrl',
+                       'status', 'updatedAt', 'updatedBy']);
+
+      // Update: VP and Secretary — editable fields with restricted status values
+      // Can publish/unpublish (draft ↔ published) but CANNOT cancel or restore.
+      // Validates both source and destination status to prevent modifying cancelled events.
+      // Cancelled events are completely read-only for VP and Secretary.
       allow update: if isSignedIn()
         && (
-          (exists(/databases/$(database)/documents/positionIndex/president)
-            && get(/databases/$(database)/documents/positionIndex/president).data.memberId == request.auth.uid)
-          || (exists(/databases/$(database)/documents/positionIndex/vice_president)
+          (exists(/databases/$(database)/documents/positionIndex/vice_president)
             && get(/databases/$(database)/documents/positionIndex/vice_president).data.memberId == request.auth.uid)
           || (exists(/databases/$(database)/documents/positionIndex/secretary)
             && get(/databases/$(database)/documents/positionIndex/secretary).data.memberId == request.auth.uid)
@@ -326,7 +530,16 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data)
              .affectedKeys()
              .hasOnly(['title', 'description', 'date', 'location', 'type', 'imageUrl', 
-                       'status', 'updatedAt', 'updatedBy']);
+                       'status', 'updatedAt', 'updatedBy'])
+        && (
+          // Block all updates to cancelled events (source status must be draft or published)
+          resource.data.status == 'draft' || resource.data.status == 'published'
+        )
+        && (
+          // If status is being changed, destination must also be draft or published
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status'])
+          || (request.resource.data.status == 'draft' || request.resource.data.status == 'published')
+        );
 
       // Delete: Admin and President only
       allow delete: if isAdmin()

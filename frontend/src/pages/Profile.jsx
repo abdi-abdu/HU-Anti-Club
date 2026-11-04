@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   User, Mail, Phone, GraduationCap, Calendar, Shield,
-  Edit2, Save, X, Lock, Eye, EyeOff, Bell, Globe
+  Edit2, Save, X, Lock, Eye, EyeOff, Globe, Loader, Camera
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../services/firebase';
 import {
   updatePassword,
   reauthenticateWithCredential,
   EmailAuthProvider
 } from 'firebase/auth';
+import { uploadImage } from '../services/imageUpload';
 import toast from 'react-hot-toast';
 
 // ── small modal wrapper ───────────────────────────────────────────────────────
@@ -40,6 +41,11 @@ const Profile = () => {
     department:  userProfile?.department  || '',
     yearOfStudy: userProfile?.yearOfStudy || '',
   });
+
+  // ── photo upload state ────────────────────────────────────────────────────
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const photoInputRef = useRef(null);
 
   // ── change password state ─────────────────────────────────────────────────
   const [pwModal,   setPwModal]   = useState(false);
@@ -78,16 +84,68 @@ const Profile = () => {
   const handlePrivacyToggle = (key) =>
     setPrivacy(prev => ({ ...prev, [key]: !prev[key] }));
 
+  // ── upload profile photo ──────────────────────────────────────────────────
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setPhotoUploading(true);
+    setUploadProgress(0);
+
+    try {
+      const result = await uploadImage(
+        file,
+        {
+          purpose: 'profile',
+          memberId: currentUser.uid,
+        },
+        (percent) => setUploadProgress(percent)
+      );
+
+      // Save photoUrl to users collection
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        photoUrl: result.url,
+        updatedAt: serverTimestamp(),
+      });
+
+      await fetchUserProfile(currentUser.uid);
+      toast.success('Profile photo updated successfully!');
+    } catch (err) {
+      console.error('Photo upload error:', err);
+      toast.error(err.message || 'Failed to upload photo');
+    } finally {
+      setPhotoUploading(false);
+      setUploadProgress(0);
+      if (photoInputRef.current) {
+        photoInputRef.current.value = '';
+      }
+    }
+  };
+
   // ── save profile ──────────────────────────────────────────────────────────
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateDoc(doc(db, 'users', currentUser.uid), {
+      // Update both users (full data) and memberProfiles (non-private data) atomically
+      const batch = writeBatch(db);
+
+      batch.update(doc(db, 'users', currentUser.uid), {
         fullName:    formData.fullName,
         phone:       formData.phone,
         department:  formData.department,
         yearOfStudy: formData.yearOfStudy,
+        updatedAt:   serverTimestamp(),
       });
+
+      // Sync non-private fields to memberProfiles (phone excluded)
+      batch.set(doc(db, 'memberProfiles', currentUser.uid), {
+        fullName:    formData.fullName,
+        department:  formData.department,
+        yearOfStudy: formData.yearOfStudy,
+        updatedAt:   serverTimestamp(),
+      }, { merge: true });
+
+      await batch.commit();
       await fetchUserProfile(currentUser.uid);
       setIsEditing(false);
       toast.success('Profile updated successfully!');
@@ -208,10 +266,66 @@ const Profile = () => {
 
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="bg-primary-100 rounded-full p-4 w-20 h-20 mx-auto mb-4 flex items-center justify-center">
-            <User className="h-10 w-10 text-primary-600" />
+          <div className="relative inline-block">
+            {/* Profile Photo */}
+            <div className="bg-primary-100 rounded-full p-1 w-24 h-24 mx-auto mb-4 flex items-center justify-center overflow-hidden">
+              {userProfile.photoUrl ? (
+                <img
+                  src={userProfile.photoUrl}
+                  alt={userProfile.fullName}
+                  className="w-full h-full object-cover rounded-full"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div
+                className={`w-full h-full flex items-center justify-center ${userProfile.photoUrl ? 'hidden' : ''}`}
+              >
+                <User className="h-12 w-12 text-primary-600" />
+              </div>
+            </div>
+
+            {/* Upload Button Overlay */}
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={photoUploading}
+              className="absolute bottom-0 right-1/2 translate-x-1/2 translate-y-1/2 bg-white rounded-full p-2 shadow-lg border-2 border-primary-100 hover:border-primary-600 hover:bg-primary-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Upload profile photo"
+            >
+              {photoUploading ? (
+                <Loader className="h-4 w-4 text-primary-600 animate-spin" />
+              ) : (
+                <Camera className="h-4 w-4 text-primary-600" />
+              )}
+            </button>
+
+            {/* Hidden File Input */}
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoUpload}
+              className="hidden"
+            />
+
+            {/* Upload Progress */}
+            {photoUploading && uploadProgress > 0 && (
+              <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-32">
+                <div className="bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-primary-600 h-full transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 text-center mt-1">{uploadProgress}%</p>
+              </div>
+            )}
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">{userProfile.fullName}</h1>
+
+          <h1 className="text-3xl font-bold text-gray-900 mt-6">{userProfile.fullName}</h1>
           <p className="text-gray-600">{userProfile.email}</p>
           <div className="flex justify-center space-x-2 mt-2">
             <span className={`px-3 py-1 rounded-full text-sm font-medium ${roleColor(userProfile.role)}`}>
@@ -230,7 +344,7 @@ const Profile = () => {
             <div>
               <h3 className="text-sm font-medium text-yellow-800">Account Pending Approval</h3>
               <p className="text-sm text-yellow-700 mt-1">
-                Your membership application is being reviewed. You'll receive full access once approved.
+                Your membership application is being reviewed. You&apos;ll receive full access once approved.
               </p>
             </div>
           </div>

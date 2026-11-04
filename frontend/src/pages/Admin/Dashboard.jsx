@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Users, Calendar, FileText, MessageCircle,
   CheckCircle, Clock, Plus, X, Save, Trash2,
@@ -40,7 +40,6 @@ const Modal = ({ title, onClose, children }) => (
 const AdminDashboard = () => {
   const { currentUser } = useAuth();
   const perms = usePermissions();
-  const { tab } = useParams();
   const navigate = useNavigate();
 
   // derive active tab from URL pathname — handles both /admin/:tab and /admin/leadership etc.
@@ -50,9 +49,6 @@ const AdminDashboard = () => {
 
   // data
   const [stats, setStats]               = useState({ totalUsers: 0, pendingUsers: 0, totalEvents: 0, totalPosts: 0, anonymousMessages: 0 });
-  const [pendingUsers, setPendingUsers]  = useState([]);
-  const [allUsers, setAllUsers]          = useState([]);
-  const [events, setEvents]              = useState([]);
   const [posts, setPosts]                = useState([]);
   const [messages, setMessages]          = useState([]);
   const [loading, setLoading]            = useState(true);
@@ -62,10 +58,6 @@ const AdminDashboard = () => {
   const [postModal,    setPostModal]    = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
   const [editingPost,  setEditingPost]  = useState(null);
-  const [regsModal,    setRegsModal]    = useState(false);
-  const [regsEvent,    setRegsEvent]    = useState(null);
-  const [regsData,     setRegsData]     = useState([]);
-  const [regsLoading,  setRegsLoading]  = useState(false);
 
   // forms
   const emptyEvent = { title: '', description: '', date: '', time: '', location: '' };
@@ -77,7 +69,7 @@ const AdminDashboard = () => {
   const POST_CATEGORIES = ['Drug Awareness', 'Health', 'News', 'Prevention', 'Recovery'];
 
   // ── fetch all data ──────────────────────────────────────────────────────────
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     try {
       // Fetch messages only if user has permission to view individual messages
       // Supervisors can see message count but not read individual messages
@@ -97,9 +89,6 @@ const AdminDashboard = () => {
       const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       const pending = users.filter(u => u.status === 'pending');
 
-      setAllUsers(users);
-      setPendingUsers(pending);
-      setEvents(eventsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setPosts(postsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       
       if (msgsSnap) {
@@ -119,14 +108,14 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [perms.canViewMessages]);
 
   useEffect(() => {
     // Wait for permissions to load before fetching data
     if (!perms.loading) {
       fetchAll();
     }
-  }, [perms.loading]);
+  }, [perms.loading, fetchAll]);
 
   // ── helpers ─────────────────────────────────────────────────────────────────
   const formatDate = (ts) => {
@@ -135,29 +124,8 @@ const AdminDashboard = () => {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  // ── user actions ─────────────────────────────────────────────────────────────
-  const updateUser = async (userId, data, msg) => {
-    try {
-      await updateDoc(doc(db, 'users', userId), data);
-      toast.success(msg);
-      fetchAll();
-    } catch { toast.error('Action failed'); }
-  };
-
   // ── event actions ────────────────────────────────────────────────────────────
   const openCreateEvent = () => { setEditingEvent(null); setEventForm(emptyEvent); setEventModal(true); };
-  const openEditEvent   = (ev) => {
-    const d = ev.date?.toDate ? ev.date.toDate() : new Date(ev.date);
-    setEditingEvent(ev);
-    setEventForm({
-      title:       ev.title,
-      description: ev.description,
-      date:        d.toISOString().split('T')[0],
-      time:        d.toTimeString().slice(0, 5),
-      location:    ev.location,
-    });
-    setEventModal(true);
-  };
 
   const saveEvent = async (e) => {
     e.preventDefault();
@@ -189,30 +157,6 @@ const AdminDashboard = () => {
     } finally { setSaving(false); }
   };
 
-  const deleteEvent = async (id) => {
-    if (!window.confirm('Delete this event?')) return;
-    try {
-      await deleteDoc(doc(db, 'events', id));
-      toast.success('Event deleted');
-      fetchAll();
-    } catch { toast.error('Failed to delete event'); }
-  };
-
-  // ── view registrations ───────────────────────────────────────────────────────
-  const viewRegistrations = async (ev) => {
-    setRegsEvent(ev);
-    setRegsModal(true);
-    setRegsLoading(true);
-    try {
-      const snap = await getDocs(collection(db, 'events', ev.id, 'registrations'));
-      setRegsData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to load registrations');
-    } finally {
-      setRegsLoading(false);
-    }
-  };
 
   // ── post actions ─────────────────────────────────────────────────────────────
   const openCreatePost = () => { setEditingPost(null); setPostForm(emptyPost); setPostModal(true); };
@@ -634,52 +578,6 @@ const AdminDashboard = () => {
               </button>
             </div>
           </form>
-        </Modal>
-      )}
-      {/* ── REGISTRATIONS MODAL ── */}
-      {regsModal && (
-        <Modal
-          title={`Registrations — ${regsEvent?.title}`}
-          onClose={() => { setRegsModal(false); setRegsData([]); }}
-        >
-          {regsLoading ? (
-            <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600" />
-            </div>
-          ) : regsData.length === 0 ? (
-            <div className="text-center py-8">
-              <Users className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-              <p className="text-gray-500">No registrations yet for this event</p>
-            </div>
-          ) : (
-            <>
-              <p className="text-sm text-gray-500 mb-4">
-                {regsData.length} {regsData.length === 1 ? 'person has' : 'people have'} registered
-              </p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="text-left px-3 py-2 font-medium text-gray-600">#</th>
-                      <th className="text-left px-3 py-2 font-medium text-gray-600">Name</th>
-                      <th className="text-left px-3 py-2 font-medium text-gray-600">Email</th>
-                      <th className="text-left px-3 py-2 font-medium text-gray-600 hidden sm:table-cell">Department</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {regsData.map((r, i) => (
-                      <tr key={r.id} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 text-gray-400">{i + 1}</td>
-                        <td className="px-3 py-2 font-medium text-gray-900">{r.fullName || '—'}</td>
-                        <td className="px-3 py-2 text-gray-600">{r.email}</td>
-                        <td className="px-3 py-2 text-gray-500 hidden sm:table-cell">{r.department || '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
         </Modal>
       )}
     </div>

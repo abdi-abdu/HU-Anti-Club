@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import toast from 'react-hot-toast';
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -29,7 +28,7 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      const { user, profile } = await signin(formData.email, formData.password);
+      const { profile } = await signin(formData.email, formData.password);
       // signin returns the profile so we can redirect immediately
       if (profile?.role === 'admin') {
         navigate('/admin');

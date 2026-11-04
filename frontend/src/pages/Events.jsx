@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, MapPin, Clock, Users, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
-  collection, query, orderBy, getDocs, where,
-  Timestamp, doc, setDoc, deleteDoc, getDoc
+  collection, query, orderBy, where, getDocs,
+  Timestamp, doc, setDoc, deleteDoc
 } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';

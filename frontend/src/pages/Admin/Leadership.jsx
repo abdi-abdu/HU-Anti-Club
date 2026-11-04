@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Award, Plus, Edit2, X, Save, AlertTriangle,
+  Plus, Edit2, X, Save, AlertTriangle,
   History, ChevronDown, ChevronUp, Eye, EyeOff,
   Image, Upload, Link as LinkIcon, Loader, Shield
 } from 'lucide-react';
@@ -9,12 +9,10 @@ import {
   query, orderBy, where, serverTimestamp,
   writeBatch, getDoc
 } from 'firebase/firestore';
-import {
-  ref, uploadBytesResumable, getDownloadURL
-} from 'firebase/storage';
-import { db, storage } from '../../services/firebase';
+import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { logAction, LOG } from '../../services/activityLog';
+import { uploadImage } from '../../services/imageUpload';
 import toast from 'react-hot-toast';
 
 // ── Available positions ───────────────────────────────────────────────────────
@@ -69,8 +67,7 @@ const Leadership = () => {
   const [showHistory,  setShowHistory]  = useState(false);
 
   // The caller's active club position, resolved from positionIndex on load.
-  // Possible values: 'supervisor' | null
-  // Admins (userProfile.role === 'admin') bypass this — they can manage all positions.
+  // Club positions remain separate from the technical website admin role.
   const [callerPosition, setCallerPosition] = useState(null);
 
   const [assignModal,  setAssignModal]  = useState(false);
@@ -108,34 +105,32 @@ const Leadership = () => {
     return false;
   };
 
-  // Can the current user see the Leadership page at all?
-  const canView = isAdmin || callerPosition === 'supervisor';
+  // All four officers and website admins can view leadership and history.
+  const canView = isAdmin || Boolean(callerPosition);
 
-  // ── Photo upload ───────────────────────────────────────────────────────────
-  const uploadPhoto = async (file, memberId) => {
+  // ── Photo upload via Cloudflare Worker → ImageKit ────────────────────────
+  const uploadPhoto = async (file, memberId, positionId) => {
     if (!file) return null;
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file (JPG, PNG, WebP)');
-      return null;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image must be smaller than 5 MB');
-      return null;
-    }
+
     setUploading(true);
     setUploadProgress(0);
+
     try {
-      const ext = file.name.split('.').pop() || 'jpg';
-      const storageRef = ref(storage, `profiles/${memberId}/leadership.${ext}`);
-      const uploadTask = uploadBytesResumable(storageRef, file);
-      return await new Promise((resolve, reject) => {
-        uploadTask.on(
-          'state_changed',
-          (snap) => setUploadProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
-          (err) => { console.error('Upload error:', err); reject(err); },
-          async () => resolve(await getDownloadURL(uploadTask.snapshot.ref))
-        );
-      });
+      const result = await uploadImage(
+        file,
+        {
+          purpose: 'leadership',
+          memberId,
+          positionId,
+        },
+        (percent) => setUploadProgress(percent)
+      );
+
+      return result.url; // Return ImageKit URL
+    } catch (err) {
+      console.error('Upload error:', err);
+      toast.error(err.message || 'Failed to upload photo');
+      return null;
     } finally {
       setUploading(false);
       setUploadProgress(0);
@@ -148,7 +143,7 @@ const Leadership = () => {
     try {
       const [apptSnap, membersSnap] = await Promise.all([
         getDocs(query(collection(db, 'leadership'), orderBy('startDate', 'desc'))),
-        getDocs(query(collection(db, 'users'), where('status', '==', 'active'))),
+        getDocs(collection(db, 'users')), // Use users collection (authoritative source)
       ]);
       setAppointments(apptSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       const memberList = membersSnap.docs
@@ -156,27 +151,26 @@ const Leadership = () => {
         .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
       setMembers(memberList);
 
-      // Resolve the caller's club position from positionIndex (Spark-compatible: single doc reads)
+      // Resolve all four official positions using individual document reads.
       if (currentUser && !isAdmin) {
-        try {
-          const supervisorSnap = await getDoc(doc(db, 'positionIndex', 'supervisor'));
-          if (supervisorSnap.exists() && supervisorSnap.data().memberId === currentUser.uid) {
-            setCallerPosition('supervisor');
-          } else {
-            setCallerPosition(null);
-          }
-        } catch {
-          // positionIndex may not exist yet — treat as no position
-          setCallerPosition(null);
-        }
-      }
-    } catch (err) {
+        const positionIds = ['supervisor', 'president', 'vice_president', 'secretary'];
+        const positionSnaps = await Promise.all(
+          positionIds.map(positionId => getDoc(doc(db, 'positionIndex', positionId)))
+        );
+        const callerRole = positionIds.find((positionId, index) =>
+          positionSnaps[index].exists()
+          && positionSnaps[index].data().memberId === currentUser.uid
+        );
+        setCallerPosition(callerRole || null);
+      } else if (isAdmin) {
+        setCallerPosition(null);
+      }} catch (err) {
       console.error('Leadership fetch error:', err);
       // Fallback without orderBy (index might not be deployed yet)
       try {
         const [apptSnap, membersSnap] = await Promise.all([
           getDocs(collection(db, 'leadership')),
-          getDocs(query(collection(db, 'users'), where('status', '==', 'active'))),
+          getDocs(collection(db, 'users')), // Use users collection (authoritative source)
         ]);
         const appts = apptSnap.docs
           .map(d => ({ id: d.id, ...d.data() }))
@@ -185,11 +179,25 @@ const Leadership = () => {
             const bd = b.startDate?.toDate?.() || new Date(0);
             return bd - ad;
           });
-        setAppointments(appts);
-        const memberList = membersSnap.docs
+        setAppointments(appts);  const memberList = membersSnap.docs
           .map(d => ({ id: d.id, ...d.data() }))
           .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
         setMembers(memberList);
+
+        // Resolve the caller's position in the fallback path too.
+        if (currentUser && !isAdmin) {
+          const positionIds = ['supervisor', 'president', 'vice_president', 'secretary'];
+          const positionSnaps = await Promise.all(
+            positionIds.map(positionId => getDoc(doc(db, 'positionIndex', positionId)))
+          );
+          const callerRole = positionIds.find((positionId, index) =>
+            positionSnaps[index].exists()
+            && positionSnaps[index].data().memberId === currentUser.uid
+          );
+          setCallerPosition(callerRole || null);
+        } else if (isAdmin) {
+          setCallerPosition(null);
+        }
       } catch (fallbackErr) {
         console.error('Fallback also failed:', fallbackErr);
         toast.error('Failed to load leadership data');
@@ -208,6 +216,8 @@ const Leadership = () => {
   const activeForPosition = (positionId) => current.find(a => a.position === positionId);
   const memberName    = (id) => members.find(m => m.id === id)?.fullName || id;
   const positionLabel = (id) => POSITIONS.find(p => p.id === id)?.label  || id;
+  // Safe name resolver: prefer denormalized field, then lookup, then fallback
+  const resolveName = (appt) => appt.memberName || memberName(appt.memberId) || 'Unknown Member';
 
   const formatDate = (val) => {
     if (!val) return '—';
@@ -274,7 +284,7 @@ const Leadership = () => {
     try {
       let finalPhotoUrl = form.photoUrl.trim() || null;
       if (form._photoFile) {
-        const uploaded = await uploadPhoto(form._photoFile, form.memberId);
+        const uploaded = await uploadPhoto(form._photoFile, form.memberId, form.position);
         if (uploaded) finalPhotoUrl = uploaded;
       }
 
@@ -345,41 +355,20 @@ const Leadership = () => {
     try {
       let finalPhotoUrl = form.photoUrl.trim() || null;
       if (form._photoFile) {
-        const uploaded = await uploadPhoto(form._photoFile, form.memberId);
+        const uploaded = await uploadPhoto(form._photoFile, form.memberId, form.position);
         if (uploaded) finalPhotoUrl = uploaded;
       }
 
-      const updatedApptData = {
-        memberId:     form.memberId,
-        memberName:   members.find(m => m.id === form.memberId)?.fullName    || '',
-        memberCollege:members.find(m => m.id === form.memberId)?.college     || '',
-        memberDept:   members.find(m => m.id === form.memberId)?.department  || '',
-        position:     form.position,
-        startDate:    toDate(form.startDate),
+      // Appointment identity is immutable: member, position, and start date
+      // are preserved. End and replace an appointment instead of rewriting history.
+      await updateDoc(doc(db, 'leadership', selected.id), {
         endDate:      form.endDate ? toDate(form.endDate) : null,
         notes:        form.notes.trim(),
         photoUrl:     finalPhotoUrl,
         showPublicly: form.showPublicly,
         updatedAt:    serverTimestamp(),
         updatedBy:    currentUser.uid,
-      };
-
-      const batch = writeBatch(db);
-      batch.update(doc(db, 'leadership', selected.id), updatedApptData);
-
-      // Always refresh positionIndex for the (possibly new) position
-      batch.set(doc(db, 'positionIndex', form.position), {
-        memberId:      form.memberId,
-        appointmentId: selected.id,
-        updatedAt:     serverTimestamp(),
       });
-
-      // If position changed, remove the old positionIndex entry
-      if (form.position !== selected.position) {
-        batch.delete(doc(db, 'positionIndex', selected.position));
-      }
-
-      await batch.commit();
 
       toast.success('Appointment updated ✓');
       await logAction(currentUser, LOG.LEADERSHIP_UPDATED, 'leadership', selected.id,
@@ -442,7 +431,7 @@ const Leadership = () => {
           : 'Now visible on public About page ✓'
       );
       await logAction(currentUser, LOG.LEADERSHIP_VISIBILITY, 'leadership', appt.id,
-        `${appt.showPublicly !== false ? 'Hidden' : 'Shown'} ${positionLabel(appt.position)} (${memberName(appt.memberId)}) on About page`);
+        `${appt.showPublicly !== false ? 'Hidden' : 'Shown'} ${positionLabel(appt.position)} (${resolveName(appt)}) on About page`);
       fetchData();
     } catch (err) {
       console.error(err);
@@ -456,13 +445,13 @@ const Leadership = () => {
       {/* Member selector */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Club Member *</label>
-        <select required value={form.memberId}
+        <select required value={form.memberId} disabled={isEdit}
           onChange={e => setForm({ ...form, memberId: e.target.value })}
           className="input-field">
           <option value="">Select an active member…</option>
-          {members.map(m => (
+          {members.filter(m => m.status === 'active').map(m => (
             <option key={m.id} value={m.id}>
-              {m.fullName} — {m.universityId || m.email}
+              {m.fullName} — {m.department || m.college || 'Club member'}
             </option>
           ))}
         </select>
@@ -472,7 +461,7 @@ const Leadership = () => {
       {/* Position selector — filtered by what the caller can manage */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Official Position *</label>
-        <select required value={form.position}
+        <select required value={form.position} disabled={isEdit}
           onChange={e => setForm({ ...form, position: e.target.value })}
           className="input-field">
           {POSITIONS.filter(p => canManagePosition(p.id)).map(p => (
@@ -492,7 +481,7 @@ const Leadership = () => {
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
-          <input type="date" required value={form.startDate}
+          <input type="date" required value={form.startDate} disabled={isEdit}
             onChange={e => setForm({ ...form, startDate: e.target.value })}
             className="input-field" />
         </div>
@@ -612,7 +601,7 @@ const Leadership = () => {
           <div>
             <p className="text-sm font-medium text-gray-900">Show on public About page</p>
             <p className="text-xs text-gray-500 mt-0.5">
-              When enabled, this person's name, position and photo appear on <strong>/about</strong>.
+              When enabled, this person&apos;s name, position and photo appear on <strong>/about</strong>.
             </p>
           </div>
           <button type="button"
@@ -740,7 +729,7 @@ const Leadership = () => {
                     <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-primary-100 bg-primary-50 flex-shrink-0 flex items-center justify-center">
                       <img
                         src={appt.photoUrl || `/images/team/${appt.memberId}.jpg`}
-                        alt={memberName(appt.memberId)}
+                        alt={resolveName(appt)}
                         className="w-full h-full object-cover"
                         onError={e => {
                           e.target.style.display = 'none';
@@ -749,12 +738,12 @@ const Leadership = () => {
                       />
                       <div className="w-full h-full items-center justify-center hidden">
                         <span className="text-lg font-bold text-primary-600">
-                          {memberName(appt.memberId).charAt(0)}
+                          {resolveName(appt).charAt(0)}
                         </span>
                       </div>
                     </div>
                     <div>
-                      <p className="font-semibold text-gray-900 text-sm">{memberName(appt.memberId)}</p>
+                      <p className="font-semibold text-gray-900 text-sm">{resolveName(appt)}</p>
                       <p className="text-xs text-gray-500">Since {formatDate(appt.startDate)}</p>
                     </div>
                   </div>
@@ -831,7 +820,7 @@ const Leadership = () => {
               <tbody className="divide-y divide-gray-100">
                 {history.map(appt => (
                   <tr key={appt.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{memberName(appt.memberId)}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{resolveName(appt)}</td>
                     <td className="px-4 py-3 text-gray-600">{positionLabel(appt.position)}</td>
                     <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{formatDate(appt.startDate)}</td>
                     <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{formatDate(appt.endDate)}</td>
@@ -865,7 +854,7 @@ const Leadership = () => {
             <AlertTriangle className="h-6 w-6 text-yellow-500 flex-shrink-0 mt-0.5" />
             <div>
               <p className="font-medium text-gray-900">
-                End {positionLabel(endModal.position)} for <strong>{memberName(endModal.memberId)}</strong>?
+                End {positionLabel(endModal.position)} for <strong>{resolveName(endModal)}</strong>?
               </p>
               <p className="text-sm text-gray-500 mt-2">
                 The historical record is preserved. The position will become vacant.

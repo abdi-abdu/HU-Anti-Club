@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Bell, Plus, Edit2, Trash2, X, Save,
-  Eye, EyeOff, AlertTriangle, Calendar
+  Eye, EyeOff, AlertTriangle
 } from 'lucide-react';
 import {
   collection, getDocs, doc, addDoc, updateDoc,
@@ -372,7 +372,7 @@ const Announcements = () => {
                   <p className="text-sm font-medium text-gray-900">Publish immediately</p>
                   <p className="text-xs text-gray-500 mt-0.5">
                     When on, this announcement is visible to all website visitors.
-                    When off, it's saved as a draft.
+                    When off, it&apos;s saved as a draft.
                   </p>
                 </div>
                 <button type="button"
@@ -408,7 +408,7 @@ const Announcements = () => {
           <div className="flex items-start gap-3 mb-6">
             <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-medium text-gray-900">Delete "{confirmDel.title}"?</p>
+              <p className="font-medium text-gray-900">Delete &quot;{confirmDel.title}&quot;?</p>
               <p className="text-sm text-gray-500 mt-1">This cannot be undone.</p>
             </div>
           </div>

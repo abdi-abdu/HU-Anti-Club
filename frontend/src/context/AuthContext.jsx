@@ -9,7 +9,7 @@ import {
   browserSessionPersistence,
   browserLocalPersistence
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import toast from 'react-hot-toast';
 
@@ -95,12 +95,29 @@ export const AuthProvider = ({ children }) => {
 
       await updateProfile(user, { displayName: userData.fullName });
 
-      await setDoc(doc(db, 'users', user.uid), {
+      // Write to both users (full data) and memberProfiles (non-private data) atomically
+      const batch = writeBatch(db);
+
+      batch.set(doc(db, 'users', user.uid), {
         ...userData,
         role: 'student',
         status: 'pending',
         createdAt: serverTimestamp(),
       });
+
+      // memberProfiles: excludes email and phone
+      batch.set(doc(db, 'memberProfiles', user.uid), {
+        fullName: userData.fullName,
+        universityId: userData.universityId,
+        college: userData.college,
+        department: userData.department,
+        yearOfStudy: userData.yearOfStudy,
+        role: 'student',
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      });
+
+      await batch.commit();
 
       toast.success('Registration successful! Awaiting admin approval.');
       return user;

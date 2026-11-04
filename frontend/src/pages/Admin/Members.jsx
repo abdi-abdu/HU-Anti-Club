@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, Search, Edit2, X, Save,
-  ChevronDown, ChevronUp, Phone,
-  GraduationCap, Calendar, Shield, AlertTriangle, Eye, Award
+  ChevronDown, ChevronUp,
+  GraduationCap, Calendar, AlertTriangle, Eye, Award
 } from 'lucide-react';
 import {
-  collection, getDocs, doc, updateDoc,
-  serverTimestamp, query, orderBy, where
+  collection, getDocs, doc,
+  serverTimestamp, query, orderBy, where, writeBatch
 } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
@@ -184,7 +184,24 @@ const Members = () => {
   // ── Firestore actions ─────────────────────────────────────────────────────
   const doUpdate = async (userId, data, successMsg) => {
     try {
-      await updateDoc(doc(db, 'users', userId), { ...data, updatedAt: serverTimestamp() });
+      // Update both users and memberProfiles atomically
+      const batch = writeBatch(db);
+
+      batch.update(doc(db, 'users', userId), {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
+
+      // Sync non-private fields to memberProfiles
+      const profileData = {};
+      if (data.status !== undefined) profileData.status = data.status;
+      if (data.role !== undefined) profileData.role = data.role;
+      if (Object.keys(profileData).length > 0) {
+        profileData.updatedAt = serverTimestamp();
+        batch.set(doc(db, 'memberProfiles', userId), profileData, { merge: true });
+      }
+
+      await batch.commit();
       toast.success(successMsg);
       fetchData();
     } catch (err) {
@@ -239,7 +256,10 @@ const Members = () => {
     if (!editForm.fullName.trim()) { toast.error('Full name is required'); return; }
     setEditSaving(true);
     try {
-      await updateDoc(doc(db, 'users', selectedMember.id), {
+      // Update both users (with phone) and memberProfiles (without phone) atomically
+      const batch = writeBatch(db);
+
+      batch.update(doc(db, 'users', selectedMember.id), {
         fullName:    editForm.fullName.trim(),
         phone:       editForm.phone.trim(),
         department:  editForm.department.trim(),
@@ -247,6 +267,17 @@ const Members = () => {
         college:     editForm.college,
         updatedAt:   serverTimestamp(),
       });
+
+      // Sync non-private fields to memberProfiles (phone excluded)
+      batch.set(doc(db, 'memberProfiles', selectedMember.id), {
+        fullName:    editForm.fullName.trim(),
+        department:  editForm.department.trim(),
+        yearOfStudy: editForm.yearOfStudy,
+        college:     editForm.college,
+        updatedAt:   serverTimestamp(),
+      }, { merge: true });
+
+      await batch.commit();
       toast.success('Member information updated ✓');
       await logAction(currentUser, LOG.MEMBER_EDITED, 'user', selectedMember.id,
         `Edited profile of: ${selectedMember.fullName}`);

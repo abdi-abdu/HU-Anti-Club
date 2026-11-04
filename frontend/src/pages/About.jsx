@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Shield, Target, Users, Heart, Award, BookOpen, User } from 'lucide-react';
+import { Shield, Target, Users, Heart, Award, BookOpen } from 'lucide-react';
 import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { POSITIONS } from './Admin/Leadership';
