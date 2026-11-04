@@ -700,5 +700,16 @@ service cloud.firestore {
       allow update: if false;
       allow delete: if false;
     }
+
+    // ── stats ────────────────────────────────────────────────────────────────
+    // Homepage statistics aggregate document (public read, admin-only write).
+    // Contains only aggregate counts for public display, no private data.
+    match /stats/current {
+      // Anyone (including unauthenticated) can read aggregate stats for homepage
+      allow read: if true;
+
+      // Only admins can create or update stats
+      allow write: if isAdmin();
+    }
   }
 }

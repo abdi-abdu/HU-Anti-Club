@@ -18,6 +18,7 @@ import AdminEvents from './Events';
 import Announcements from './Announcements';
 import ActivityLog from './ActivityLog';
 import { logAction, LOG } from '../../services/activityLog';
+import { recalculateStats } from '../../services/stats';
 import toast from 'react-hot-toast';
 
 // ─── tiny modal wrapper ───────────────────────────────────────────────────────
@@ -71,35 +72,41 @@ const AdminDashboard = () => {
   // ── fetch all data ──────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     try {
-      // Fetch messages only if user has permission to view individual messages
-      // Supervisors can see message count but not read individual messages
+      const memberCollection = perms.isSupervisor
+        ? 'memberProfiles'
+        : 'users';
+
       const fetchPromises = [
-        getDocs(collection(db, 'users')),
+        getDocs(collection(db, memberCollection)),
         getDocs(query(collection(db, 'events'), orderBy('createdAt', 'desc'))),
-        getDocs(query(collection(db, 'posts'),  orderBy('createdAt', 'desc'))),
+        getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc'))),
       ];
 
       if (perms.canViewMessages) {
-        fetchPromises.push(getDocs(query(collection(db, 'anonymousMessages'), orderBy('createdAt', 'desc'))));
+        fetchPromises.push(
+          getDocs(query(collection(db, 'anonymousMessages'), orderBy('createdAt', 'desc')))
+        );
       }
 
       const results = await Promise.all(fetchPromises);
-      const [usersSnap, eventsSnap, postsSnap, msgsSnap] = results;
+      const [membersSnap, eventsSnap, postsSnap, msgsSnap] = results;
 
-      const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const pending = users.filter(u => u.status === 'pending');
+      const members = membersSnap.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+      }));
 
       setPosts(postsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      
+
       if (msgsSnap) {
         setMessages(msgsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       }
 
       setStats({
-        totalUsers:        users.filter(u => u.status !== 'deactivated').length,
-        pendingUsers:      pending.length,
-        totalEvents:       eventsSnap.size,
-        totalPosts:        postsSnap.size,
+        totalUsers: members.filter(m => m.status !== 'deactivated').length,
+        pendingUsers: members.filter(m => m.status === 'pending').length,
+        totalEvents: eventsSnap.size,
+        totalPosts: postsSnap.size,
         anonymousMessages: msgsSnap ? msgsSnap.size : 0,
       });
     } catch (err) {
@@ -108,7 +115,7 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [perms.canViewMessages]);
+  }, [perms.canViewMessages, perms.isSupervisor]);
 
   useEffect(() => {
     // Wait for permissions to load before fetching data
@@ -261,7 +268,17 @@ const AdminDashboard = () => {
             </div>
 
             {/* Quick Actions — only actions the current role can perform */}
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Quick Actions</h2>
+              {perms.isAdmin && (
+            <button
+              onClick={() => recalculateStats(currentUser)}
+              className="btn-secondary flex items-center gap-2 text-sm"
+              title="Recalculate homepage statistics from database">
+              <Edit2 className="h-4 w-4" /> Recalculate Homepage Stats
+            </button>
+          )}
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {perms.canManageEvents && (
                 <button onClick={() => { navigate('/admin/events'); openCreateEvent(); }}

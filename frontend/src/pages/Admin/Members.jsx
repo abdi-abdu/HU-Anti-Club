@@ -13,6 +13,7 @@ import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { POSITIONS } from './Leadership';
 import { logAction, LOG } from '../../services/activityLog';
+import { updateStats } from '../../services/stats';
 import toast from 'react-hot-toast';
 
 // ── Modal wrapper ─────────────────────────────────────────────────────────────
@@ -203,6 +204,15 @@ const Members = () => {
 
       await batch.commit();
       toast.success(successMsg);
+
+      // Update stats if status changed to/from active
+      if (data.status !== undefined) {
+        const activeCount = members.filter(m =>
+          m.id === userId ? data.status === 'active' : m.status === 'active'
+        ).length;
+        await updateStats({ activeMemberCount: activeCount });
+      }
+
       fetchData();
     } catch (err) {
       console.error(err);

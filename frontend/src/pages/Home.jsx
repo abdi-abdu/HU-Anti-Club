@@ -1,19 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Calendar, BookOpen, Heart, ArrowRight, Bell } from 'lucide-react';
+import { Users, Calendar, BookOpen, ArrowRight, Bell } from 'lucide-react';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { getTypeConfig } from './Admin/Announcements';
+import { getStats } from '../services/stats';
 
 const Home = () => {
   const [recentEvents,        setRecentEvents]        = useState([]);
   const [recentPosts,         setRecentPosts]         = useState([]);
   const [announcements,       setAnnouncements]       = useState([]);
+  const [stats,               setStats]               = useState(null);
   const [loading,             setLoading]             = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Fetch homepage statistics
+        const statsData = await getStats();
+        setStats(statsData);
+
         // Fetch recent published events — fetch all then filter/sort client-side
         // to avoid composite index requirement (status + createdAt)
         const eventsSnapshot = await getDocs(
@@ -47,12 +53,12 @@ const Home = () => {
     fetchData();
   }, []);
 
-  const stats = [
-    { icon: Users, label: 'Active Members', value: '500+' },
-    { icon: Calendar, label: 'Events Held', value: '50+' },
-    { icon: BookOpen, label: 'Resources', value: '100+' },
-    { icon: Heart, label: 'Lives Impacted', value: '1000+' }
-  ];
+  // Build statistics display array
+  const statisticsDisplay = stats ? [
+    { icon: Users, label: 'Active Members', value: stats.activeMemberCount || 0 },
+    { icon: Calendar, label: 'Events Held', value: stats.eventsHeldCount || 0 },
+    { icon: BookOpen, label: 'Resources', value: stats.resourceCount || 0 },
+  ] : [];
 
   return (
     <div className="min-h-screen">
@@ -138,17 +144,29 @@ const Home = () => {
             </p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {stats.map((stat, index) => (
-              <div key={index} className="text-center">
-                <div className="bg-primary-100 rounded-full p-4 w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-                  <stat.icon className="h-8 w-8 text-primary-600" />
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="text-center animate-pulse">
+                  <div className="bg-gray-200 rounded-full p-4 w-16 h-16 mx-auto mb-4" />
+                  <div className="h-8 bg-gray-200 rounded mx-auto mb-2 w-20" />
+                  <div className="h-4 bg-gray-200 rounded mx-auto w-32" />
                 </div>
-                <h3 className="text-3xl font-bold text-gray-900 mb-2">{stat.value}</h3>
-                <p className="text-gray-600">{stat.label}</p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {statisticsDisplay.map((stat, index) => (
+                <div key={index} className="text-center">
+                  <div className="bg-primary-100 rounded-full p-4 w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                    <stat.icon className="h-8 w-8 text-primary-600" />
+                  </div>
+                  <h3 className="text-3xl font-bold text-gray-900 mb-2">{stat.value}</h3>
+                  <p className="text-gray-600">{stat.label}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

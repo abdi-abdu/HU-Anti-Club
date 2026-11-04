@@ -11,6 +11,7 @@ import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { logAction, LOG } from '../../services/activityLog';
+import { updateStats } from '../../services/stats';
 import toast from 'react-hot-toast';
 
 // ── Event types ───────────────────────────────────────────────────────────────
@@ -174,12 +175,33 @@ const AdminEvents = () => {
         await logAction(currentUser, logKey, 'event', docRef.id,
           `${form.status === 'published' ? 'Published' : 'Created draft'} event: "${form.title}"`);
       }
+
+      // Update events held count if status is published and event is in the past
+      if (form.status === 'published' && dateTime < new Date()) {
+        await updateEventsHeldCount();
+      }
+
       setEventModal(false);
       fetchEvents();
     } catch (err) {
       console.error(err);
       toast.error('Failed to save event');
     } finally { setSaving(false); }
+  };
+
+  // Helper to recalculate events held count
+  const updateEventsHeldCount = async () => {
+    try {
+      const now = new Date();
+      const heldCount = events.filter(e =>
+        e.status === 'published' &&
+        (e.date?.toDate?.() || new Date(e.date || 0)) < now
+      ).length;
+      await updateStats({ eventsHeldCount: heldCount });
+    } catch (err) {
+      console.error('Failed to recalculate events held count:', err);
+      // Error notification handled by updateStats
+    }
   };
 
   // ── quick status toggle ───────────────────────────────────────────────────
@@ -191,6 +213,10 @@ const AdminEvents = () => {
       toast.success(newStatus === 'published' ? 'Event published ✓' : 'Event unpublished');
       await logAction(currentUser, logKey, 'event', ev.id,
         `${newStatus === 'published' ? 'Published' : 'Unpublished'} event: "${ev.title}"`);
+
+      // Update events held count after status change
+      await updateEventsHeldCount();
+
       fetchEvents();
     } catch { toast.error('Failed to update status'); }
   };
@@ -203,6 +229,10 @@ const AdminEvents = () => {
       toast.success('Event deleted');
       await logAction(currentUser, LOG.EVENT_DELETED, 'event', confirmModal.id,
         `Deleted event: "${confirmModal.title}"`);
+
+      // Update events held count after deletion
+      await updateEventsHeldCount();
+
       setConfirmModal(null);
       fetchEvents();
     } catch { toast.error('Failed to delete event'); }
@@ -367,6 +397,7 @@ const AdminEvents = () => {
                     <button
                       onClick={async () => {
                         await updateDoc(doc(db, 'events', ev.id), { status: 'cancelled', updatedAt: serverTimestamp() });
+                        await updateEventsHeldCount();
                         toast.success('Event cancelled');
                         fetchEvents();
                       }}
@@ -380,6 +411,7 @@ const AdminEvents = () => {
                     <button
                       onClick={async () => {
                         await updateDoc(doc(db, 'events', ev.id), { status: 'draft', updatedAt: serverTimestamp() });
+                        await updateEventsHeldCount();
                         toast.success('Event restored to draft');
                         fetchEvents();
                       }}

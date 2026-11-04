@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import {
   initializeTestEnvironment,
   assertSucceeds,
@@ -12,6 +14,9 @@ import {
 } from 'firebase/firestore';
 import { before, after, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const PROJECT_ID = 'demo-anti-drug-club';
 const ACTOR = 'actor-user';
@@ -74,7 +79,7 @@ before(async () => {
     firestore: {
       host: '127.0.0.1',
       port: 8080,
-      rules: readFileSync('backend/firestore.rules', 'utf8'),
+      rules: readFileSync(join(__dirname, '..', 'firestore.rules'), 'utf8'),
     },
   });
 });

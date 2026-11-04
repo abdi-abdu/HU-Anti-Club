@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import {
   initializeTestEnvironment,
   assertSucceeds,
@@ -11,6 +13,9 @@ import {
   deleteDoc,
 } from 'firebase/firestore';
 import { before, after, test } from 'node:test';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const PROJECT_ID = 'demo-anti-drug-club';
 const ADMIN = 'test-admin';
@@ -77,7 +82,7 @@ before(async () => {
     firestore: {
       host: '127.0.0.1',
       port: 8080,
-      rules: readFileSync('backend/firestore.rules', 'utf8'),
+      rules: readFileSync(join(__dirname, '..', 'firestore.rules'), 'utf8'),
     },
   });
 });
