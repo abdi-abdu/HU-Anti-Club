@@ -102,6 +102,14 @@
       ]
     },
     {
+      "collectionGroup": "memberProfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "role", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "resources",
       "queryScope": "COLLECTION",
       "fields": [

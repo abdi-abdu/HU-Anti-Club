@@ -6,7 +6,7 @@ import {
   Edit2, Award, Shield
 } from 'lucide-react';
 import {
-  collection, query, getDocs, orderBy,
+  collection, query, getDocs, orderBy, where,
   updateDoc, doc, addDoc, deleteDoc, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../../services/firebase';
@@ -72,12 +72,15 @@ const AdminDashboard = () => {
   // ── fetch all data ──────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     try {
-      const memberCollection = perms.isSupervisor
-        ? 'memberProfiles'
-        : 'users';
+      // Admin uses users (full data, includes admin accounts)
+      // Officers use memberProfiles filtered to club members only (excludes admin accounts)
+      const memberCollection = perms.isAdmin ? 'users' : 'memberProfiles';
+      const membersQuery = perms.isAdmin
+        ? collection(db, 'users')
+        : query(collection(db, 'memberProfiles'), where('role', '==', 'student'));
 
       const fetchPromises = [
-        getDocs(collection(db, memberCollection)),
+        getDocs(membersQuery),
         getDocs(query(collection(db, 'events'), orderBy('createdAt', 'desc'))),
         getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc'))),
       ];
@@ -115,7 +118,7 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [perms.canViewMessages, perms.isSupervisor]);
+  }, [perms.canViewMessages, perms.isAdmin]);
 
   useEffect(() => {
     // Wait for permissions to load before fetching data

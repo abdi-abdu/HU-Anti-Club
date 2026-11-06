@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, Search, Edit2, X, Save,
   ChevronDown, ChevronUp,
-  GraduationCap, Calendar, AlertTriangle, Eye, Award
+  GraduationCap, Calendar, AlertTriangle, Eye, Award, Download
 } from 'lucide-react';
 import {
   collection, getDocs, doc,
@@ -83,6 +83,58 @@ const COLLEGES = [
 ];
 const YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year', '5th Year', 'Graduate'];
 
+// ── CSV Export Utility ────────────────────────────────────────────────────────
+/**
+ * Escapes a field value for CSV format.
+ * Handles quotes, commas, newlines, ensures UTF-8 compatibility,
+ * and prevents CSV formula injection.
+ */
+const escapeCsvField = (value) => {
+  if (value === null || value === undefined || value === '') return '';
+  let str = String(value);
+
+  // Prevent CSV formula injection: escape values starting with =, +, -, @
+  const dangerousChars = ['=', '+', '-', '@'];
+  if (dangerousChars.includes(str.charAt(0))) {
+    str = "'" + str; // Prefix with single quote to neutralize formula
+  }
+
+  // If the field contains comma, double quote, or newline, wrap in quotes and escape internal quotes
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+};
+
+/**
+ * Converts an array of objects to CSV string.
+ */
+const convertToCSV = (data, columns) => {
+  const headers = columns.map(col => escapeCsvField(col.header)).join(',');
+  const rows = data.map(row =>
+    columns.map(col => escapeCsvField(col.accessor(row))).join(',')
+  );
+  return [headers, ...rows].join('\n');
+};
+
+/**
+ * Triggers browser download of CSV file.
+ */
+const downloadCSV = (csvContent, filename) => {
+  // Add UTF-8 BOM for Excel compatibility
+  const BOM = '\uFEFF';
+  const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 const Members = () => {
   const { currentUser } = useAuth();
@@ -110,40 +162,169 @@ const Members = () => {
   const [editForm,   setEditForm]   = useState(emptyEdit);
   const [editSaving, setEditSaving] = useState(false);
 
+  // CSV export state
+  const [exportDepartment, setExportDepartment] = useState('all');
+  const [exporting, setExporting] = useState(false);
+
   // ── fetch members + active leadership ────────────────────────────────────
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [usersSnap, leadershipSnap] = await Promise.all([
-        getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc'))),
-        // fetch only active appointments to build the position map
-        getDocs(query(collection(db, 'leadership'), where('status', '==', 'active'))),
-      ]);
+      // Admin uses users (full data, includes admin accounts)
+      // Officers use memberProfiles filtered to club members only (excludes admin accounts)
+      const baseQuery = perms.isAdmin
+        ? query(collection(db, 'users'), orderBy('createdAt', 'desc'))
+        : query(
+            collection(db, 'memberProfiles'),
+            where('role', '==', 'student'),
+            orderBy('createdAt', 'desc')
+          );
 
-      // build memberId → positionId map
-      const pMap = {};
-      leadershipSnap.docs.forEach(d => {
-        const { memberId, position } = d.data();
-        if (memberId && position) pMap[memberId] = position;
-      });
-
-      setMembers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setPositionMap(pMap);
-    } catch (err) {
-      console.error(err);
-      // Fallback: load members without leadership data if leadership query fails
+      // Fetch members first (primary query)
+      let membersSnap;
       try {
-        const usersSnap = await getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc')));
-        setMembers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (e) {
-        toast.error('Failed to load members');
+        membersSnap = await getDocs(baseQuery);
+      } catch (memberErr) {
+        console.error('Members query error:', memberErr.code, memberErr.message);
+        // Fallback without orderBy
+        if (perms.isAdmin) {
+          membersSnap = await getDocs(collection(db, 'users'));
+        } else {
+          membersSnap = await getDocs(
+            query(collection(db, 'memberProfiles'), where('role', '==', 'student'))
+          );
+        }
+        // Sort in JavaScript since orderBy failed
+        const membersList = membersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        membersList.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || a.createdAt?.seconds * 1000 || 0;
+          const bTime = b.createdAt?.toMillis?.() || b.createdAt?.seconds * 1000 || 0;
+          return bTime - aTime;
+        });
+        setMembers(membersList);
       }
+
+      if (membersSnap && !membersSnap.empty) {
+        const membersList = membersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setMembers(membersList);
+      }
+
+      // Fetch leadership data independently (position map is optional)
+      try {
+        const leadershipSnap = await getDocs(
+          query(collection(db, 'leadership'), where('status', '==', 'active'))
+        );
+        const pMap = {};
+        leadershipSnap.docs.forEach(d => {
+          const { memberId, position } = d.data();
+          if (memberId && position) pMap[memberId] = position;
+        });
+        setPositionMap(pMap);
+      } catch (leaderErr) {
+        console.error('Leadership query error:', leaderErr.code, leaderErr.message);
+        // Leadership query failed, but members already loaded
+        // Position badges will show '—' which is acceptable
+        setPositionMap({});
+      }
+    } catch (err) {
+      console.error('Fatal members fetch error:', err.code, err.message);
+      toast.error('Failed to load members');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [perms.isAdmin]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ── CSV Export Function ───────────────────────────────────────────────────
+  const handleExportCSV = async () => {
+    // Enforce permission check
+    if (!perms.canViewMembers) {
+      toast.error('You do not have permission to export members');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      // Fetch active members from memberProfiles collection (non-private data)
+      // Filter to club members only (excludes admin accounts)
+      const q = query(
+        collection(db, 'memberProfiles'),
+        where('role', '==', 'student'),
+        where('status', '==', 'active')
+      );
+
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        toast.error('No active members to export');
+        setExporting(false);
+        return;
+      }
+
+      // Convert Firestore documents to array
+      let profiles = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Filter by department if selected
+      if (exportDepartment !== 'all') {
+        profiles = profiles.filter(p => p.department === exportDepartment);
+      }
+
+      if (profiles.length === 0) {
+        toast.error(`No active members found${exportDepartment !== 'all' ? ' in selected department' : ''}`);
+        setExporting(false);
+        return;
+      }
+
+      // Sort alphabetically by full name in JavaScript
+      profiles.sort((a, b) => {
+        const nameA = (a.fullName || '').toLowerCase();
+        const nameB = (b.fullName || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+
+      // Define CSV columns (excluding email, phone, Firebase UID, website role)
+      const columns = [
+        { header: 'Full Name', accessor: (row) => row.fullName || '' },
+        { header: 'University ID', accessor: (row) => row.universityId || '' },
+        { header: 'College', accessor: (row) => row.college || '' },
+        { header: 'Department', accessor: (row) => row.department || '' },
+        { header: 'Year of Study', accessor: (row) => row.yearOfStudy || '' },
+        {
+          header: 'Registration Date',
+          accessor: (row) => {
+            if (!row.createdAt) return '';
+            const date = row.createdAt.toDate ? row.createdAt.toDate() : new Date(row.createdAt);
+            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+          }
+        },
+      ];
+
+      // Generate CSV content
+      const csvContent = convertToCSV(profiles, columns);
+
+      // Generate filename with current date
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const filename = `active-members-${today}.csv`;
+
+      // Trigger download
+      downloadCSV(csvContent, filename);
+
+      toast.success(`Exported ${profiles.length} active member${profiles.length !== 1 ? 's' : ''} ✓`);
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast.error('Failed to export members. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Get unique departments from active members for the export filter
+  const activeDepartments = [...new Set(
+    members
+      .filter(m => m.status === 'active' && m.department)
+      .map(m => m.department)
+  )].sort();
 
   // ── filter + sort ─────────────────────────────────────────────────────────
   const filtered = members
@@ -401,6 +582,49 @@ const Members = () => {
           </select>
         </div>
       </div>
+
+      {/* Export Active Members */}
+      {perms.canViewMembers && (
+        <div className="card p-4 mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Download className="h-5 w-5 text-primary-600" />
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Export Active Members</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Download CSV with {counts.active} active member{counts.active !== 1 ? 's' : ''} (name, ID, college, department, year, registration date)
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <select
+                value={exportDepartment}
+                onChange={e => setExportDepartment(e.target.value)}
+                className="input-field py-2 w-full sm:w-56"
+                disabled={exporting}
+              >
+                <option value="all">All Departments ({counts.active})</option>
+                {activeDepartments.map(dept => {
+                  const count = members.filter(m => m.status === 'active' && m.department === dept).length;
+                  return (
+                    <option key={dept} value={dept}>
+                      {dept} ({count})
+                    </option>
+                  );
+                })}
+              </select>
+              <button
+                onClick={handleExportCSV}
+                disabled={exporting || counts.active === 0}
+                className="btn-primary flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download className="h-4 w-4" />
+                {exporting ? 'Exporting…' : 'Download CSV'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       {loading ? (

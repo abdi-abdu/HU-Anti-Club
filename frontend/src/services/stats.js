@@ -82,11 +82,15 @@ export const recalculateStats = async (currentUser) => {
   try {
     toast.loading('Recalculating statistics...', { id: 'recalc' });
 
-    // Count active members
-    const usersSnap = await getDocs(
-      query(collection(db, 'users'), where('status', '==', 'active'))
+    // Count active club members (excludes admin accounts)
+    const memberProfilesSnap = await getDocs(
+      query(
+        collection(db, 'memberProfiles'),
+        where('role', '==', 'student'),
+        where('status', '==', 'active')
+      )
     );
-    const activeMemberCount = usersSnap.size;
+    const activeMemberCount = memberProfilesSnap.size;
 
     // Count all resources (no status field, all resources are "published")
     const resourcesSnap = await getDocs(collection(db, 'resources'));

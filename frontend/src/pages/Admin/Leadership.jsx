@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { logAction, LOG } from '../../services/activityLog';
 import { uploadImage } from '../../services/imageUpload';
 import toast from 'react-hot-toast';
@@ -60,6 +61,7 @@ const ApptBadge = ({ status }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 const Leadership = () => {
   const { currentUser, userProfile } = useAuth();
+  const perms = usePermissions();
 
   const [appointments, setAppointments] = useState([]);
   const [members,      setMembers]      = useState([]);
@@ -141,9 +143,15 @@ const Leadership = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      // Admin uses users (full data, includes admin accounts)
+      // Officers use memberProfiles filtered to club members only (excludes admin accounts)
+      const membersQuery = perms.isAdmin
+        ? collection(db, 'users')
+        : query(collection(db, 'memberProfiles'), where('role', '==', 'student'));
+
       const [apptSnap, membersSnap] = await Promise.all([
         getDocs(query(collection(db, 'leadership'), orderBy('startDate', 'desc'))),
-        getDocs(collection(db, 'users')), // Use users collection (authoritative source)
+        getDocs(membersQuery),
       ]);
       setAppointments(apptSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       const memberList = membersSnap.docs
@@ -151,27 +159,21 @@ const Leadership = () => {
         .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
       setMembers(memberList);
 
-      // Resolve all four official positions using individual document reads.
-      if (currentUser && !isAdmin) {
-        const positionIds = ['supervisor', 'president', 'vice_president', 'secretary'];
-        const positionSnaps = await Promise.all(
-          positionIds.map(positionId => getDoc(doc(db, 'positionIndex', positionId)))
-        );
-        const callerRole = positionIds.find((positionId, index) =>
-          positionSnaps[index].exists()
-          && positionSnaps[index].data().memberId === currentUser.uid
-        );
-        setCallerPosition(callerRole || null);
-      } else if (isAdmin) {
-        setCallerPosition(null);
-      }} catch (err) {
-      console.error('Leadership fetch error:', err);
+      // Resolve caller's position
+      await resolveCallerPosition();
+    } catch (err) {
+      console.error('Leadership fetch error:', err.code, err.message);
       // Fallback without orderBy (index might not be deployed yet)
       try {
+        const membersQuery = perms.isAdmin
+          ? collection(db, 'users')
+          : query(collection(db, 'memberProfiles'), where('role', '==', 'student'));
+
         const [apptSnap, membersSnap] = await Promise.all([
           getDocs(collection(db, 'leadership')),
-          getDocs(collection(db, 'users')), // Use users collection (authoritative source)
+          getDocs(membersQuery),
         ]);
+
         const appts = apptSnap.docs
           .map(d => ({ id: d.id, ...d.data() }))
           .sort((a, b) => {
@@ -179,33 +181,40 @@ const Leadership = () => {
             const bd = b.startDate?.toDate?.() || new Date(0);
             return bd - ad;
           });
-        setAppointments(appts);  const memberList = membersSnap.docs
+        setAppointments(appts);
+
+        const memberList = membersSnap.docs
           .map(d => ({ id: d.id, ...d.data() }))
           .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
         setMembers(memberList);
 
-        // Resolve the caller's position in the fallback path too.
-        if (currentUser && !isAdmin) {
-          const positionIds = ['supervisor', 'president', 'vice_president', 'secretary'];
-          const positionSnaps = await Promise.all(
-            positionIds.map(positionId => getDoc(doc(db, 'positionIndex', positionId)))
-          );
-          const callerRole = positionIds.find((positionId, index) =>
-            positionSnaps[index].exists()
-            && positionSnaps[index].data().memberId === currentUser.uid
-          );
-          setCallerPosition(callerRole || null);
-        } else if (isAdmin) {
-          setCallerPosition(null);
-        }
+        // Resolve caller's position in fallback path
+        await resolveCallerPosition();
       } catch (fallbackErr) {
-        console.error('Fallback also failed:', fallbackErr);
+        console.error('Fallback also failed:', fallbackErr.code, fallbackErr.message);
         toast.error('Failed to load leadership data');
       }
     } finally {
       setLoading(false);
     }
-  }, [currentUser, isAdmin]);
+  }, [currentUser, isAdmin, perms.isAdmin]);
+
+  // Helper to resolve caller's position (extracted to avoid duplication)
+  const resolveCallerPosition = async () => {
+    if (currentUser && !isAdmin) {
+      const positionIds = ['supervisor', 'president', 'vice_president', 'secretary'];
+      const positionSnaps = await Promise.all(
+        positionIds.map(positionId => getDoc(doc(db, 'positionIndex', positionId)))
+      );
+      const callerRole = positionIds.find((positionId, index) =>
+        positionSnaps[index].exists()
+        && positionSnaps[index].data().memberId === currentUser.uid
+      );
+      setCallerPosition(callerRole || null);
+    } else if (isAdmin) {
+      setCallerPosition(null);
+    }
+  };
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
