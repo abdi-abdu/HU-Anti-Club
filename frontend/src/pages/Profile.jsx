@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import {
   User, Mail, Phone, GraduationCap, Calendar, Shield,
-  Edit2, Save, X, Lock, Eye, EyeOff, Globe, Loader, Camera
+  Edit2, Save, X, Lock, Eye, EyeOff, Globe, Loader, Camera, Download, CreditCard
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { doc, updateDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
@@ -12,6 +12,8 @@ import {
   EmailAuthProvider
 } from 'firebase/auth';
 import { uploadImage } from '../services/imageUpload';
+import MembershipCard from '../components/MembershipCard';
+import { generateMembershipCardPDF, checkMembershipCardEligibility } from '../utils/pdfGenerator';
 import toast from 'react-hot-toast';
 
 // ── small modal wrapper ───────────────────────────────────────────────────────
@@ -58,6 +60,10 @@ const Profile = () => {
     newPassword:     '',
     confirmPassword: '',
   });
+
+  // ── membership card state ──────────────────────────────────────────────────
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [showCardPreview, setShowCardPreview] = useState(false);
 
   // ── privacy settings state ────────────────────────────────────────────────
   const [privModal,  setPrivModal]  = useState(false);
@@ -219,6 +225,30 @@ const Profile = () => {
       console.error(err);
       toast.error('Failed to save privacy settings');
     } finally { setPrivSaving(false); }
+  };
+
+  // ── download membership card ──────────────────────────────────────────────
+  const handleDownloadCard = async () => {
+    // Check eligibility before generating PDF
+    const eligibility = checkMembershipCardEligibility(userProfile);
+
+    if (!eligibility.eligible) {
+      toast.error(eligibility.reason);
+      return;
+    }
+
+    setIsGeneratingPDF(true);
+    const loadingToast = toast.loading('Generating your membership card...');
+
+    try {
+      await generateMembershipCardPDF(userProfile);
+      toast.success('Membership card downloaded successfully!', { id: loadingToast });
+    } catch (error) {
+      console.error('Membership card generation error:', error);
+      toast.error(error.message || 'Failed to generate membership card', { id: loadingToast });
+    } finally {
+      setIsGeneratingPDF(false);
+    }
   };
 
   // ── status / role colours ─────────────────────────────────────────────────
@@ -475,6 +505,88 @@ const Profile = () => {
             </div>
           </div>
         </div>
+
+        {/* Membership Card Section - Only for active student members */}
+        {userProfile.role === 'student' && userProfile.status === 'active' && (
+          <div className="mt-8">
+            <div className="card p-8">
+              <div className="flex items-center mb-4">
+                <div className="bg-primary-100 rounded-lg p-2 mr-3">
+                  <CreditCard className="h-5 w-5 text-primary-600" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900">My Membership Card</h2>
+              </div>
+
+              <p className="text-gray-600 mb-6 text-sm">
+                Download your official HU Anti-Drug Club membership card. The card must be printed and
+                physically signed and stamped by the Club President for official use.
+              </p>
+
+              {/* Card Preview */}
+              <div className="bg-gray-50 rounded-lg p-6 mb-6 flex justify-center overflow-x-auto">
+                <div style={{ transform: 'scale(0.85)', transformOrigin: 'center' }}>
+                  <MembershipCard userProfile={userProfile} />
+                </div>
+              </div>
+
+              {/* Download Button */}
+              <div className="flex flex-col sm:flex-row gap-4">
+                <button
+                  onClick={handleDownloadCard}
+                  disabled={isGeneratingPDF}
+                  className="btn-primary flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGeneratingPDF ? (
+                    <>
+                      <Loader className="h-4 w-4 mr-2 animate-spin" />
+                      Generating PDF...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Membership Card
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Important Notice */}
+              <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-800">
+                  <strong>Important:</strong> This is a club membership card for identification within club activities.
+                  It is not an official university student ID. After downloading and printing, the card must be
+                  signed by the Club President and stamped with the official club stamp.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pending Member Notice for Card */}
+        {userProfile.role === 'student' && userProfile.status !== 'active' && (
+          <div className="mt-8">
+            <div className="card p-8">
+              <div className="flex items-center mb-4">
+                <div className="bg-gray-100 rounded-lg p-2 mr-3">
+                  <CreditCard className="h-5 w-5 text-gray-400" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900">Membership Card</h2>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start">
+                <Shield className="h-5 w-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" />
+                <div>
+                  <h3 className="text-sm font-medium text-yellow-800">Card Not Available</h3>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    {userProfile.status === 'pending' && 'Your membership card will be available once your account is approved by an administrator.'}
+                    {userProfile.status === 'rejected' && 'Your membership application was not approved. Please contact the club administration if you believe this is an error.'}
+                    {userProfile.status === 'deactivated' && 'Your membership has been deactivated. Please contact the club administration for more information.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Account Actions */}
         <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
