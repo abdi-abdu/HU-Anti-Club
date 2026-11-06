@@ -9,20 +9,6 @@
       ]
     },
     {
-      "collectionGroup": "activityLogs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "timestamp", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "registrations",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "registeredAt", "order": "DESCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
@@ -95,31 +81,10 @@
       ]
     },
     {
-      "collectionGroup": "leadership",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "startDate", "order": "DESCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "memberProfiles",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "role", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "resources",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "anonymousMessages",
-      "queryScope": "COLLECTION",
-      "fields": [
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
     }
